@@ -3,218 +3,286 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCC REM Montréal - Simulateur</title>
-    
-    <script src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"></script>
-    <link href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
-
+    <title>PCC REM Montréal - Synoptique du Réseau</title>
     <style>
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #0b0f19; color: #fff;
+            overflow: hidden; font-family: 'Courier New', Courier, monospace;
+            background-color: #060911; color: #00ff66;
         }
-        #cesiumContainer {
-            width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+        
+        /* Interface Globale */
+        #main-container {
+            display: flex; flex-direction: column; width: 100%; height: 100%;
         }
-        /* Style Interface PCC */
-        #pcc-panel {
-            position: absolute; top: 20px; left: 20px; width: 320px;
-            background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(10px);
-            border: 1px solid #00ff6633; border-radius: 8px; padding: 20px;
-            z-index: 10; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+
+        #header {
+            height: 40px; background: #0c1322; border-bottom: 2px solid #00ff66;
+            display: flex; align-items: center; padding: 0 20px; justify-content: space-between;
         }
-        h1 { font-size: 16px; margin: 0 0 15px 0; color: #00ff66; letter-spacing: 1px; text-transform: uppercase; }
-        .control-btn {
-            width: 100%; padding: 10px; margin-bottom: 8px; border: none; border-radius: 4px;
-            background: #222b3c; color: white; font-weight: bold; cursor: pointer; transition: 0.2s;
+
+        #pcc-title { font-weight: bold; font-size: 16px; letter-spacing: 2px; }
+
+        /* Zone de dessin des voies (Canvas) */
+        #simulation-zone {
+            flex: 1; position: relative; background: #080d16;
         }
-        .control-btn:hover { background: #323f58; }
-        .btn-alert { background: #d93838; }
-        .btn-alert:hover { background: #ff4d4d; }
+        canvas { width: 100%; height: 100%; display: block; }
+
+        /* Panneau de contrôle inférieur et Logs */
+        #pcc-dashboard {
+            height: 220px; background: #0c1322; border-top: 2px solid #00ff66;
+            display: flex; padding: 15px; box-sizing: border-box; gap: 20px;
+        }
+
+        #controls {
+            width: 350px; display: flex; flex-direction: column; gap: 10px;
+        }
+
+        select, button {
+            background: #121b2d; color: #00ff66; border: 1px solid #00ff66;
+            padding: 10px; font-family: inherit; font-size: 14px; font-weight: bold;
+            cursor: pointer; border-radius: 4px; box-sizing: border-box;
+        }
+
+        button:hover { background: #00ff66; color: #060911; }
+        .btn-alert { border-color: #ff3333; color: #ff3333; }
+        .btn-alert:hover { background: #ff3333; color: #fff; }
+
         #log-container {
-            position: absolute; bottom: 20px; left: 20px; right: 20px; height: 120px;
-            background: rgba(11, 15, 25, 0.9); border: 1px solid #333;
-            border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px;
-            overflow-y: auto; color: #a0aec0; z-index: 10;
+            flex: 1; background: #04070c; border: 1px solid #1a2942;
+            border-radius: 4px; padding: 10px; font-size: 12px;
+            overflow-y: auto; color: #88a0c0;
         }
-        .log-entry { margin-bottom: 4px; }
-        .log-time { color: #00ff66; margin-right: 8px; }
-        select {
-            width: 100%; padding: 8px; background: #1a2333; color: white;
-            border: 1px solid #334155; border-radius: 4px; margin-bottom: 15px;
-        }
+        .log-entry { margin-bottom: 5px; line-height: 1.4; }
+        .log-time { color: #00ff66; margin-right: 10px; }
     </style>
 </head>
 <body>
 
-    <div id="cesiumContainer"></div>
-
-    <div id="pcc-panel">
-        <h1>PCC REM - Surveillance</h1>
-        <label for="rame-select">Sélectionner une rame :</label>
-        <select id="rame-select">
-            <option value="A1">REM-A1 (Rive-Sud)</option>
-            <option value="A2">REM-A2 (Aéroport)</option>
-            <option value="A3">REM-A3 (Anse-à-l'Orme)</option>
-            <option value="A4">REM-A4 (Deux-Montagnes)</option>
-        </select>
-        
-        <button class="control-btn btn-alert" onclick="arretUrgence()">ARRÊT D'URGENCE RAME</button>
-        <button class="control-btn" onclick="modeMeteo()">MODE TEMPÊTE (RALENTIR)</button>
-        <button class="control-btn" onclick="relancerRame()">FORCER LE DÉPART (AUTO)</button>
+<div id="main-container">
+    <div id="header">
+        <div id="pcc-title">🔴 PCC REM - SURVEILLANCE SYNOPTIQUE DU RÉSEAU</div>
+        <div id="pcc-status">MODE: AUTOMATIQUE (ATC)</div>
     </div>
 
-    <div id="log-container" id="logBox"></div>
+    <div id="simulation-zone">
+        <canvas id="synoptiqueCanvas"></canvas>
+    </div>
 
-    <script>
-        // --- COORDONNÉES DES 4 ANTENNES ---
-        const reseauREM = {
-            "A1": [
-                {lat: 45.5002, lon: -73.5667, alt: 50}, // Gare Centrale
-                {lat: 45.4925, lon: -73.5531, alt: 45}, // Île-des-Sœurs
-                {lat: 45.4510, lon: -73.4682, alt: 35}, // Du Quartier
-                {lat: 45.4422, lon: -73.4425, alt: 30}  // Brossard
-            ],
-            "A2": [
-                {lat: 45.5002, lon: -73.5667, alt: 50},
-                {lat: 45.4962, lon: -73.6241, alt: 55}, // Édouard-Montpetit
-                {lat: 45.4832, lon: -73.7294, alt: 40}, // Des Sources
-                {lat: 45.4697, lon: -73.7441, alt: 35}  // YUL-Aéroport
-            ],
-            "A3": [
-                {lat: 45.5002, lon: -73.5667, alt: 50},
-                {lat: 45.5230, lon: -73.7412, alt: 45}, // Sunnybrooke
-                {lat: 45.4523, lon: -73.8741, alt: 40}, // Kirkland
-                {lat: 45.4385, lon: -73.9182, alt: 35}  // Anse-à-l'Orme
-            ],
-            "A4": [
-                {lat: 45.5002, lon: -73.5667, alt: 50},
-                {lat: 45.5182, lon: -73.6133, alt: 20}, // Canora
-                {lat: 45.5512, lon: -73.7122, alt: 40}, // Du Ruisseau
-                {lat: 45.5361, lon: -73.8543, alt: 35}  // Deux-Montagnes
-            ]
-        };
+    <div id="pcc-dashboard">
+        <div id="controls">
+            <label for="rame-select">SÉLECTION COMMANDE RAME :</label>
+            <select id="rame-select"></select>
+            <button class="control-btn btn-alert" onclick="arretUrgence()">INTERRUPTEUR URGENCE RAME</button>
+            <button class="control-btn" onclick="modeMeteo()">MODE TEMPÊTE (RALENTIR LE RÉSEAU)</button>
+            <button class="control-btn" onclick="relancerRame()">FORCER LE RÉARMEMENT DU BLOC</button>
+        </div>
 
-        // --- INITIALISATION DE LA CARTE 3D ---
-        const viewer = new Cesium.Viewer('cesiumContainer', {
-            terrainProvider: Cesium.createWorldTerrain(),
-            animation: false, timeline: false, infoBox: false, selectionIndicator: false
-        });
+        <div id="log-container"></div>
+    </div>
+</div>
 
-        // Activation des bâtiments 3D mondiaux (OSM)
-        viewer.scene.primitives.add(Cesium.createOsmBuildings());
+<script>
+    const canvas = document.getElementById('synoptiqueCanvas');
+    const ctx = canvas.getContext('2d');
 
-        // Centrer la caméra initiale au-dessus de Montréal
-        viewer.camera.setView({
-            destination: Cesium.Cartesian3.fromDegrees(-73.5667, 45.4850, 4000),
-            orientation: { pitch: Cesium.Math.toRadians(-45) }
-        });
+    // Ajustement de la résolution du canvas
+    function resizeCanvas() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+    }
+    window.addEventListener('resize', resizeCanvas);
 
-        // --- INSTANCIATION DES RAMES ---
-        let rames = {};
-        Object.keys(reseauREM).forEach(key => {
-            let start = reseauREM[key][0];
-            rames[key] = {
-                id: `REM-${key}-${Math.floor(Math.random()*900+100)}`,
-                antenne: key,
-                vitesse: 0.005,
-                vitesseCible: 0.005,
-                progression: 0.0,
-                etape: 0,
-                enStation: false,
-                tempsArret: 0,
-                enUrgence: false,
-                entity: viewer.entities.add({
-                    name: `Rame ${key}`,
-                    position: Cesium.Cartesian3.fromDegrees(start.lon, start.lat, start.alt),
-                    point: { pixelSize: 14, color: Cesium.Color.fromCssColorString('#00ff66'), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 }
-                })
-            };
-        });
+    // --- COORDONNÉES ET TRACÉS SIMULÉS DU RÉSEAU (Générés par code à l'écran) ---
+    // Représentation graphique schématique (X de 0 à 1000, Y de 0 à 500)
+    const lignesGraphiques = {
+        "A1_Rive_Sud": [
+            { name: "Gare Centrale", x: 150, y: 250 },
+            { name: "Île-des-Sœurs", x: 350, y: 250 },
+            { name: "Du Quartier", x: 650, y: 150 },
+            { name: "Brossard", x: 900, y: 150 }
+        ],
+        "A2_Aeroport": [
+            { name: "Gare Centrale", x: 150, y: 250 },
+            { name: "Édouard-Montpetit", x: 350, y: 350 },
+            { name: "Des Sources", x: 650, y: 450 },
+            { name: "YUL-Aéroport", x: 900, y: 450 }
+        ],
+        "A3_Anse_Al_Orme": [
+            { name: "Gare Centrale", x: 150, y: 250 },
+            { name: "Sunnybrooke", x: 350, y: 200 },
+            { name: "Kirkland", x: 650, y: 80 },
+            { name: "Anse-à-l'Orme", x: 900, y: 80 }
+        ],
+        "A4_Deux_Montagnes": [
+            { name: "Gare Centrale", x: 150, y: 250 },
+            { name: "Canora", x: 350, y: 300 },
+            { name: "Du Ruisseau", x: 650, y: 380 },
+            { name: "Deux-Montagnes", x: 900, y: 380 }
+        ]
+    };
 
-        // --- LOGIQUE DE JEU (BOUCLE DE MISE À JOUR) ---
-        setInterval(() => {
-            Object.keys(rames).forEach(key => {
-                let r = rames[key];
-                let points = reseauREM[r.antenne];
+    // --- INSTANCIATION DES RAMES ET DE LEUR CONFIGURATION ---
+    let rames = [
+        { id: "REM-A1-402", ligne: "A1_Rive_Sud", etape: 0, prog: 0, sens: 1, vitesse: 0.005, maxVit: 0.005, enStation: false, timerArret: 0, urgence: false },
+        { id: "REM-A2-118", ligne: "A2_Aeroport", etape: 0, prog: 0, sens: 1, vitesse: 0.004, maxVit: 0.004, enStation: false, timerArret: 0, urgence: false },
+        { id: "REM-A3-305", ligne: "A3_Anse_Al_Orme", etape: 0, prog: 0, sens: 1, vitesse: 0.006, maxVit: 0.006, enStation: false, timerArret: 0, urgence: false },
+        { id: "REM-A4-221", ligne: "A4_Deux_Montagnes", etape: 0, prog: 0, sens: 1, vitesse: 0.005, maxVit: 0.005, enStation: false, timerArret: 0, urgence: false }
+    ];
 
-                if (r.enUrgence) {
-                    r.vitesse = 0;
-                    return;
-                }
+    // Remplir la liste déroulante UI au démarrage
+    const select = document.getElementById('rame-select');
+    rames.forEach(r => {
+        let opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = `${r.id} (${r.ligne.split('_')[0]})`;
+        select.appendChild(opt);
+    });
 
-                if (r.enStation) {
-                    r.tempsArret += 0.1;
-                    if (r.tempsArret >= 4.0) { // Arrêt 4 secondes
-                        r.enStation = false;
-                        r.tempsArret = 0;
-                        ajouterLog(`${r.id} : Fermeture des portes. Départ de la station.`);
-                    }
-                } else {
-                    r.progression += r.vitesse;
-                    
-                    let pA = points[r.etape];
-                    let pB = points[r.etape + 1];
+    // --- BOUCLE TECHNIQUE D'ANIMATION ET DE LOGIQUE ---
+    function updateEtRender() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        // Facteurs d'échelle dynamiques basés sur la taille de l'écran du joueur
+        const scaleX = canvas.width / 1100;
+        const scaleY = canvas.height / 600;
 
-                    // Interpolation de la position
-                    let currLon = pA.lon + (pB.lon - pA.lon) * r.progression;
-                    let currLat = pA.lat + (pB.lat - pA.lat) * r.progression;
-                    let currAlt = pA.alt + (pB.alt - pA.alt) * r.progression;
+        // 1. DESSIN DES LIGNES ET DES STATIONS (Le Synoptique Électronique)
+        Object.keys(lignesGraphiques).forEach(key => {
+            const stations = lignesGraphiques[key];
+            
+            // Tracer les rails de sécurité en bleu/gris cyber
+            ctx.beginPath();
+            ctx.strokeStyle = "#1a2a47";
+            ctx.lineWidth = 4;
+            for(let i=0; i<stations.length; i++) {
+                if(i===0) ctx.moveTo(stations[i].x * scaleX, stations[i].y * scaleY);
+                else ctx.lineTo(stations[i].x * scaleX, stations[i].y * scaleY);
+            }
+            ctx.stroke();
 
-                    r.entity.position = Cesium.Cartesian3.fromDegrees(currLon, currLat, currAlt);
+            // Dessiner les stations (Noeuds de contrôle)
+            stations.forEach(st => {
+                ctx.beginPath();
+                ctx.arc(st.x * scaleX, st.y * scaleY, 6, 0, 2 * Math.PI);
+                ctx.fillStyle = "#0c1322";
+                ctx.fill();
+                ctx.strokeStyle = "#00ff66";
+                ctx.lineWidth = 2;
+                ctx.stroke();
 
-                    if (r.progression >= 1.0) {
-                        r.progression = 0.0;
-                        r.etape++;
-
-                        if (r.etape >= points.size - 1 || r.etape >= points.length - 1) {
-                            r.etape = 0;
-                            points.reverse(); // Demi-tour au terminus
-                            ajouterLog(`${r.id} : Terminus atteint. Inversion du sens.`);
-                        }
-
-                        r.enStation = true;
-                        ajouterLog(`${r.id} : Arrêt automatique en station. Portes ouvertes.`);
-                    }
-                }
+                // Étiquettes de texte des stations du REM
+                ctx.fillStyle = "#88a0c0";
+                ctx.font = "11px Courier New";
+                ctx.fillText(st.name, (st.x * scaleX) - 40, (st.y * scaleY) - 15);
             });
-        }, 100);
+        });
 
-        // --- FONCTIONS DU PANEL ---
-        function ajouterLog(texte) {
-            const container = document.getElementById('log-container');
-            const maintenant = new Date().toLocaleTimeString();
-            container.innerHTML += `<div class="log-entry"><span class="log-time">[${maintenant}]</span>${texte}</div>`;
-            container.scrollTop = container.scrollHeight;
+        // 2. MISE À JOUR ET DESSIN DES RAMES (Les blocs roulants)
+        rames.forEach(r => {
+            const stations = lignesGraphiques[r.ligne];
+            
+            if (!r.urgence && !r.enStation) {
+                r.prog += r.vitesse;
+                if (r.prog >= 1.0) {
+                    r.prog = 0;
+                    r.etape += r.sens;
+
+                    // Arrivée en bout de ligne (Terminus)
+                    if (r.etape >= stations.length - 1 || r.etape <= 0) {
+                        r.sens *= -1; // Inversion du sens de marche
+                        ajouterLog(`${r.id} : Terminus atteint. Inversion du vecteur de marche.`);
+                    }
+                    r.enStation = true;
+                    ajouterLog(`${r.id} : Entrée en station automatique. Alignement des portes.`);
+                }
+            } else if (r.enStation) {
+                r.timerArret += 0.016; // Environ 60 FPS
+                if (r.timerArret >= 3.0) { // Temps de stationnement : 3 secondes
+                    r.enStation = false;
+                    r.timerArret = 0;
+                    ajouterLog(`${r.id} : Libération des voies. Signal de départ vert.`);
+                }
+            }
+
+            // Calcul du point de rendu sur la spline
+            let ptA = stations[r.etape];
+            let ptB = stations[r.etape + (r.sens > 0 ? 1 : -1)];
+            
+            if (ptA && ptB) {
+                let currentX = (ptA.x + (ptB.x - ptA.x) * r.prog) * scaleX;
+                let currentY = (ptA.y + (ptB.y - ptA.y) * r.prog) * scaleY;
+
+                // Affichage visuel du train (Bloc dynamique)
+                ctx.beginPath();
+                ctx.arc(currentX, currentY, 8, 0, 2 * Math.PI);
+                
+                // Si la rame est arrêtée d'urgence par le joueur : elle clignote en rouge
+                if (r.urgence) {
+                    ctx.fillStyle = (Math.floor(Date.now() / 250) % 2 === 0) ? "#ff3333" : "#060911";
+                } else if (r.enStation) {
+                    ctx.fillStyle = "#ffffff"; // Blanc en station (portes ouvertes)
+                } else {
+                    ctx.fillStyle = "#00ff66"; // Vert en mouvement normal
+                }
+                ctx.fill();
+                ctx.strokeStyle = "#fff";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+
+                // Code identifiant écrit juste au-dessus du bloc
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 10px Courier New";
+                ctx.fillText(r.id, currentX - 25, currentY + 20);
+            }
+        });
+
+        requestAnimationFrame(updateEtRender);
+    }
+
+    // --- LOGIQUE DE COMMANDE DU POSTE DE CONTRÔLE ---
+    function ajouterLog(texte) {
+        const container = document.getElementById('log-container');
+        const temps = new Date().toLocaleTimeString();
+        container.innerHTML += `<div class="log-entry"><span class="log-time">[${temps}]</span>${texte}</div>`;
+        container.scrollTop = container.scrollHeight;
+    }
+
+    function getSelectedRame() {
+        let id = select.value;
+        return rames.find(r => r.id === id);
+    }
+
+    function arretUrgence() {
+        let r = getSelectedRame();
+        if(r) {
+            r.urgence = true;
+            ajouterLog(`⚠️ ALERTE : Section de bloc verrouillée. Arrêt d'urgence appliqué sur ${r.id}.`);
         }
+    }
 
-        function getRame() {
-            let val = document.getElementById('rame-select').value;
-            return rames[val];
-        }
+    function modeMeteo() {
+        rames.forEach(r => { r.vitesse = r.maxVit * 0.4; });
+        ajouterLog(`❄️ CONFIG : Mode dégradation météo actif. Vitesse max bridée sur l'ensemble des antennes.`);
+    }
 
-        function arretUrgence() {
-            let r = getRame();
-            r.enUrgence = true;
-            ajouterLog(`URGENCE : Coupure de traction ordonnée sur ${r.id}.`);
-        }
-
-        function modeMeteo() {
-            Object.keys(rames).forEach(key => { rames[key].vitesse = 0.002; });
-            ajouterLog(`MÉTÉO : Restriction générale de vitesse à 30 km/h (Alerte Neige/Glace).`);
-        }
-
-        function relancerRame() {
-            let r = getRame();
-            r.enUrgence = false;
-            r.vitesse = r.vitesseCible;
+    function relancerRame() {
+        let r = getSelectedRame();
+        if(r) {
+            r.urgence = false;
             r.enStation = false;
-            ajouterLog(`PCC : Autorisation de départ envoyée à ${r.id}. Système ATC réarmé.`);
+            r.vitesse = r.maxVit;
+            ajouterLog(`✅ PCC : Réarmement des automatismes pour ${r.id}. Reprise du profil ATC normal.`);
         }
+    }
 
-        // Message initial
-        ajouterLog("Système de supervision PCC connecté. Réseau REM A1-A2-A3-A4 en ligne.");
-    </script>
+    // Lancement du système
+    resizeCanvas();
+    ajouterLog("Connexion aux serveurs de signalisation centrale opérationnelle.");
+    ajouterLog("Réseau REM complet (A1, A2, A3, A4) : Synoptique en ligne.");
+    requestAnimationFrame(updateEtRender);
+</script>
+
 </body>
 </html>
