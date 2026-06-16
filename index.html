@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCC REM Montréal - Simulateur</title>
+    
+    <script src="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Cesium.js"></script>
+    <link href="https://cesium.com/downloads/cesiumjs/releases/1.115/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+
+    <style>
+        html, body {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #0b0f19; color: #fff;
+        }
+        #cesiumContainer {
+            width: 100%; height: 100%; position: absolute; top: 0; left: 0;
+        }
+        /* Style Interface PCC */
+        #pcc-panel {
+            position: absolute; top: 20px; left: 20px; width: 320px;
+            background: rgba(11, 15, 25, 0.85); backdrop-filter: blur(10px);
+            border: 1px solid #00ff6633; border-radius: 8px; padding: 20px;
+            z-index: 10; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+        }
+        h1 { font-size: 16px; margin: 0 0 15px 0; color: #00ff66; letter-spacing: 1px; text-transform: uppercase; }
+        .control-btn {
+            width: 100%; padding: 10px; margin-bottom: 8px; border: none; border-radius: 4px;
+            background: #222b3c; color: white; font-weight: bold; cursor: pointer; transition: 0.2s;
+        }
+        .control-btn:hover { background: #323f58; }
+        .btn-alert { background: #d93838; }
+        .btn-alert:hover { background: #ff4d4d; }
+        #log-container {
+            position: absolute; bottom: 20px; left: 20px; right: 20px; height: 120px;
+            background: rgba(11, 15, 25, 0.9); border: 1px solid #333;
+            border-radius: 6px; padding: 10px; font-family: monospace; font-size: 12px;
+            overflow-y: auto; color: #a0aec0; z-index: 10;
+        }
+        .log-entry { margin-bottom: 4px; }
+        .log-time { color: #00ff66; margin-right: 8px; }
+        select {
+            width: 100%; padding: 8px; background: #1a2333; color: white;
+            border: 1px solid #334155; border-radius: 4px; margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="cesiumContainer"></div>
+
+    <div id="pcc-panel">
+        <h1>PCC REM - Surveillance</h1>
+        <label for="rame-select">Sélectionner une rame :</label>
+        <select id="rame-select">
+            <option value="A1">REM-A1 (Rive-Sud)</option>
+            <option value="A2">REM-A2 (Aéroport)</option>
+            <option value="A3">REM-A3 (Anse-à-l'Orme)</option>
+            <option value="A4">REM-A4 (Deux-Montagnes)</option>
+        </select>
+        
+        <button class="control-btn btn-alert" onclick="arretUrgence()">ARRÊT D'URGENCE RAME</button>
+        <button class="control-btn" onclick="modeMeteo()">MODE TEMPÊTE (RALENTIR)</button>
+        <button class="control-btn" onclick="relancerRame()">FORCER LE DÉPART (AUTO)</button>
+    </div>
+
+    <div id="log-container" id="logBox"></div>
+
+    <script>
+        // --- COORDONNÉES DES 4 ANTENNES ---
+        const reseauREM = {
+            "A1": [
+                {lat: 45.5002, lon: -73.5667, alt: 50}, // Gare Centrale
+                {lat: 45.4925, lon: -73.5531, alt: 45}, // Île-des-Sœurs
+                {lat: 45.4510, lon: -73.4682, alt: 35}, // Du Quartier
+                {lat: 45.4422, lon: -73.4425, alt: 30}  // Brossard
+            ],
+            "A2": [
+                {lat: 45.5002, lon: -73.5667, alt: 50},
+                {lat: 45.4962, lon: -73.6241, alt: 55}, // Édouard-Montpetit
+                {lat: 45.4832, lon: -73.7294, alt: 40}, // Des Sources
+                {lat: 45.4697, lon: -73.7441, alt: 35}  // YUL-Aéroport
+            ],
+            "A3": [
+                {lat: 45.5002, lon: -73.5667, alt: 50},
+                {lat: 45.5230, lon: -73.7412, alt: 45}, // Sunnybrooke
+                {lat: 45.4523, lon: -73.8741, alt: 40}, // Kirkland
+                {lat: 45.4385, lon: -73.9182, alt: 35}  // Anse-à-l'Orme
+            ],
+            "A4": [
+                {lat: 45.5002, lon: -73.5667, alt: 50},
+                {lat: 45.5182, lon: -73.6133, alt: 20}, // Canora
+                {lat: 45.5512, lon: -73.7122, alt: 40}, // Du Ruisseau
+                {lat: 45.5361, lon: -73.8543, alt: 35}  // Deux-Montagnes
+            ]
+        };
+
+        // --- INITIALISATION DE LA CARTE 3D ---
+        const viewer = new Cesium.Viewer('cesiumContainer', {
+            terrainProvider: Cesium.createWorldTerrain(),
+            animation: false, timeline: false, infoBox: false, selectionIndicator: false
+        });
+
+        // Activation des bâtiments 3D mondiaux (OSM)
+        viewer.scene.primitives.add(Cesium.createOsmBuildings());
+
+        // Centrer la caméra initiale au-dessus de Montréal
+        viewer.camera.setView({
+            destination: Cesium.Cartesian3.fromDegrees(-73.5667, 45.4850, 4000),
+            orientation: { pitch: Cesium.Math.toRadians(-45) }
+        });
+
+        // --- INSTANCIATION DES RAMES ---
+        let rames = {};
+        Object.keys(reseauREM).forEach(key => {
+            let start = reseauREM[key][0];
+            rames[key] = {
+                id: `REM-${key}-${Math.floor(Math.random()*900+100)}`,
+                antenne: key,
+                vitesse: 0.005,
+                vitesseCible: 0.005,
+                progression: 0.0,
+                etape: 0,
+                enStation: false,
+                tempsArret: 0,
+                enUrgence: false,
+                entity: viewer.entities.add({
+                    name: `Rame ${key}`,
+                    position: Cesium.Cartesian3.fromDegrees(start.lon, start.lat, start.alt),
+                    point: { pixelSize: 14, color: Cesium.Color.fromCssColorString('#00ff66'), outlineColor: Cesium.Color.WHITE, outlineWidth: 2 }
+                })
+            };
+        });
+
+        // --- LOGIQUE DE JEU (BOUCLE DE MISE À JOUR) ---
+        setInterval(() => {
+            Object.keys(rames).forEach(key => {
+                let r = rames[key];
+                let points = reseauREM[r.antenne];
+
+                if (r.enUrgence) {
+                    r.vitesse = 0;
+                    return;
+                }
+
+                if (r.enStation) {
+                    r.tempsArret += 0.1;
+                    if (r.tempsArret >= 4.0) { // Arrêt 4 secondes
+                        r.enStation = false;
+                        r.tempsArret = 0;
+                        ajouterLog(`${r.id} : Fermeture des portes. Départ de la station.`);
+                    }
+                } else {
+                    r.progression += r.vitesse;
+                    
+                    let pA = points[r.etape];
+                    let pB = points[r.etape + 1];
+
+                    // Interpolation de la position
+                    let currLon = pA.lon + (pB.lon - pA.lon) * r.progression;
+                    let currLat = pA.lat + (pB.lat - pA.lat) * r.progression;
+                    let currAlt = pA.alt + (pB.alt - pA.alt) * r.progression;
+
+                    r.entity.position = Cesium.Cartesian3.fromDegrees(currLon, currLat, currAlt);
+
+                    if (r.progression >= 1.0) {
+                        r.progression = 0.0;
+                        r.etape++;
+
+                        if (r.etape >= points.size - 1 || r.etape >= points.length - 1) {
+                            r.etape = 0;
+                            points.reverse(); // Demi-tour au terminus
+                            ajouterLog(`${r.id} : Terminus atteint. Inversion du sens.`);
+                        }
+
+                        r.enStation = true;
+                        ajouterLog(`${r.id} : Arrêt automatique en station. Portes ouvertes.`);
+                    }
+                }
+            });
+        }, 100);
+
+        // --- FONCTIONS DU PANEL ---
+        function ajouterLog(texte) {
+            const container = document.getElementById('log-container');
+            const maintenant = new Date().toLocaleTimeString();
+            container.innerHTML += `<div class="log-entry"><span class="log-time">[${maintenant}]</span>${texte}</div>`;
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function getRame() {
+            let val = document.getElementById('rame-select').value;
+            return rames[val];
+        }
+
+        function arretUrgence() {
+            let r = getRame();
+            r.enUrgence = true;
+            ajouterLog(`URGENCE : Coupure de traction ordonnée sur ${r.id}.`);
+        }
+
+        function modeMeteo() {
+            Object.keys(rames).forEach(key => { rames[key].vitesse = 0.002; });
+            ajouterLog(`MÉTÉO : Restriction générale de vitesse à 30 km/h (Alerte Neige/Glace).`);
+        }
+
+        function relancerRame() {
+            let r = getRame();
+            r.enUrgence = false;
+            r.vitesse = r.vitesseCible;
+            r.enStation = false;
+            ajouterLog(`PCC : Autorisation de départ envoyée à ${r.id}. Système ATC réarmé.`);
+        }
+
+        // Message initial
+        ajouterLog("Système de supervision PCC connecté. Réseau REM A1-A2-A3-A4 en ligne.");
+    </script>
+</body>
+</html>
