@@ -1,241 +1,314 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>REM Montréal - Simulateur Multi-Trains OCC</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script async src="https://unpkg.com/es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.158.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.158.0/examples/jsm/"
+            }
+        }
+    </script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #050505; font-family: 'Inter', sans-serif; }
+        .scada-panel { background: #0f1115; border-right: 2px solid #1f2937; }
+        .led { width: 10px; height: 10px; border-radius: 50%; transition: all 0.2s; }
+        .led-green { background-color: #22c55e; box-shadow: 0 0 12px #22c55e; }
+        .led-yellow { background-color: #eab308; box-shadow: 0 0 12px #eab308; }
+        .led-red { background-color: #ef4444; box-shadow: 0 0 12px #ef4444; }
+        .led-off { background-color: #374151; }
+        .blink { animation: blinker 0.8s step-start infinite; }
+        @keyframes blinker { 50% { opacity: 0; } }
+        ::-webkit-scrollbar { width: 4px; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 10px; }
+    </style>
+</head>
+<body class="flex h-screen w-screen text-gray-300">
 
-<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/><meta name="viewport" content="width=device-width, initial-scale=1"/><link rel="stylesheet" href="/assets/styles-BW7f0q2W.css" data-precedence="default"/><title>REM PCC — Simulateur de métro léger</title><meta name="author" content="Lovable"/><meta property="og:type" content="website"/><meta name="twitter:card" content="summary"/><meta name="twitter:site" content="@Lovable"/><meta name="description" content="Simulateur 3D interactif du Réseau Express Métropolitain de Montréal — Poste de Commande Centralisé (PCC)."/><meta property="og:title" content="REM PCC — Simulateur 3D"/><meta property="og:description" content="Pilote une rame du REM en mode automatique ou manuel depuis un poste SCADA."/><link rel="modulepreload" href="/assets/index-Cbw3D_h-.js"/><link rel="modulepreload" href="/assets/routes-ajch6__R.js"/>
-<style>
-	@font-face {
-		font-family: 'CameraPlainVariable';
-		src: url('https://cdn.gpteng.co/mcp-widgets/v1/fonts/CameraPlainVariable.woff2') format('woff2');
-		font-weight: 100 900;
-		font-style: normal;
-		font-display: swap;
-	}
+    <!-- SCADA INTERFACE GAUCHE -->
+    <div class="scada-panel w-[350px] flex flex-col z-10 shadow-2xl">
+        <!-- Header -->
+        <div class="p-4 bg-black/40 border-b border-white/5">
+            <div class="flex items-center justify-between mb-1">
+                <h1 class="text-xl font-black text-white tracking-tighter">REM <span class="text-green-500">OCC</span></h1>
+                <span class="text-[10px] bg-red-600 px-2 py-0.5 rounded text-white animate-pulse">LIVE</span>
+            </div>
+            <p class="text-[10px] text-gray-500 uppercase tracking-widest">Opérations Centre de Contrôle</p>
+        </div>
 
-	#lovable-badge {
-		--badge-bg: #1b1b1b;
-		--badge-text: #c5c1b9;
-		--badge-text-hover: #dcdad5;
-		--badge-radius: 6px;
-		--badge-padding: 8px;
-		--badge-gap: 6px;
-		--badge-shadow: 
-			0 0 0 1px rgba(0, 0, 0, 0.88),
-			0 1px 0 0 rgba(0, 0, 0, 0.04),
-			0 2px 2px -1px rgba(0, 0, 0, 0.08),
-			0 4px 4px -2px rgba(0, 0, 0, 0.08),
-			0 8px 8px -4px rgba(0, 0, 0, 0.08),
-			0 16px 16px -8px rgba(0, 0, 0, 0.08);
-		--badge-transition-duration: 0.2s;
-		--badge-transition-easing: cubic-bezier(0.16, 1, 0.32, 1);
-		--focus-color: #575ECF;
-		--focus-offset: 2px;
-		--focus-width: 2px;
-		
-		position: fixed;
-		bottom: 12px;
-		right: 12px;
-		height: 24px;
-		display: flex;
-		align-items: center;
-		z-index: 1000000;
-		background-color: var(--badge-bg) !important;
-		color: var(--badge-text) !important;
-		border-radius: var(--badge-radius);
-		box-shadow: var(--badge-shadow) !important;
-		font-size: 12px;
-		font-family: CameraPlainVariable, "CameraPlainVariable Fallback", -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-		font-weight: 400 !important;
-		text-transform: none !important;
-		font-feature-settings: normal !important;
-		transform: translateZ(0);
-		will-change: transform, opacity;
-	}
+        <!-- Statut du Train Sélectionné -->
+        <div class="p-4 space-y-4 overflow-y-auto flex-grow">
+            <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div class="flex justify-between items-center mb-3">
+                    <span class="text-xs font-bold text-blue-400">TRAIN MR-01 (LEADER)</span>
+                    <div id="led-atc" class="led led-green"></div>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2 mb-4 text-center text-[10px]">
+                    <div class="bg-black/40 p-2 rounded">
+                        <div class="text-gray-500 mb-1">VITESSE</div>
+                        <div class="text-lg font-mono text-green-400"><span id="val-speed">0</span> <span class="text-[10px]">km/h</span></div>
+                    </div>
+                    <div class="bg-black/40 p-2 rounded">
+                        <div class="text-gray-500 mb-1">MODE</div>
+                        <div id="val-mode" class="text-lg font-mono text-yellow-500">AUTO</div>
+                    </div>
+                </div>
 
-	#lovable-badge-cta {
-		display: flex;
-		align-items: center;
-		gap: var(--badge-gap);
-		padding: 0 var(--badge-padding);
-		height: 100%;
-		color: inherit;
-		text-decoration: none;
-		white-space: nowrap;
-		border-radius: var(--badge-radius) 0 0 var(--badge-radius);
-		transition: 
-			background-color var(--badge-transition-duration) ease,
-			color var(--badge-transition-duration) ease,
-			transform 0.1s ease;
-	}
+                <div class="space-y-1">
+                    <div class="flex justify-between text-[10px] uppercase text-gray-500">
+                        <span>Traction</span>
+                        <span id="txt-emergency" class="text-red-500 hidden font-bold">URGENCE ACTIVÉE</span>
+                    </div>
+                    <div class="w-full bg-gray-800 h-1.5 rounded-full overflow-hidden">
+                        <div id="bar-speed" class="bg-green-500 h-full transition-all" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
 
-	#lovable-badge-cta:hover {
-		background: rgba(255, 255, 255, 0.04);
-		color: var(--badge-text-hover);
-	}
+            <!-- Portes -->
+            <div class="bg-white/5 rounded-lg p-3 border border-white/10">
+                <div class="flex justify-between items-center mb-2">
+                    <span class="text-[10px] font-bold uppercase">Portes Train / Quai</span>
+                    <div id="led-doors" class="led led-off"></div>
+                </div>
+                <button id="btn-doors" class="w-full py-2 bg-orange-600 hover:bg-orange-500 disabled:opacity-20 disabled:cursor-not-allowed text-white text-xs font-bold rounded transition-all uppercase">
+                    Ouverture Manuelle [O]
+                </button>
+            </div>
 
-	#lovable-badge-cta:active {
-		transform: scale(0.98);
-	}
+            <!-- Carte de Ligne Dynamique -->
+            <div>
+                <h2 class="text-[10px] font-bold text-gray-500 mb-3 uppercase tracking-widest border-b border-gray-800 pb-1">Synoptique de Ligne</h2>
+                <div id="station-list" class="space-y-1 relative pl-4 border-l-2 border-gray-800 ml-2 py-2 text-[11px]">
+                    <!-- Stations injectées ici -->
+                </div>
+            </div>
+        </div>
 
-	#lovable-badge-cta:focus {
-		outline: none;
-	}
+        <!-- Footer Commandes -->
+        <div class="p-4 bg-black/60 text-[10px] border-t border-white/5">
+            <div class="grid grid-cols-2 gap-2">
+                <span class="text-gray-600 font-mono">Z/S : ACCEL/FREIN</span>
+                <span class="text-gray-600 font-mono">M : AUTO/MANU</span>
+                <span class="text-gray-600 font-mono">C : CAMÉRA</span>
+                <span class="text-gray-600 font-mono">ESP : URGENCE</span>
+            </div>
+        </div>
+    </div>
 
-	#lovable-badge-cta:focus-visible {
-		outline: var(--focus-width) solid var(--focus-color);
-		outline-offset: var(--focus-offset);
-		z-index: 1;
-	}
+    <!-- RENDU 3D -->
+    <div class="flex-grow relative">
+        <div id="container" class="w-full h-full"></div>
+        <div id="camera-label" class="absolute top-6 right-6 bg-black/80 px-4 py-2 border border-white/10 text-[10px] font-mono rounded-full uppercase tracking-tighter shadow-2xl">
+            Vue : Poursuite
+        </div>
+    </div>
 
-	#lovable-badge-text {
-		line-height: 1;
-	}
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-	#lovable-badge-divider {
-		width: 1px;
-		height: 24px;
-		background-color: rgba(255, 255, 255, 0.04);
-		flex-shrink: 0;
-	}
+        // --- DONNÉES RÉSEAU ---
+        const STATIONS = [
+            { name: "Brossard", pos: 0 },
+            { name: "Du Quartier", pos: 1200 },
+            { name: "Panama", pos: 3200 },
+            { name: "Île-des-Sœurs", pos: 7500 },
+            { name: "Gare Centrale", pos: 10500 },
+            { name: "McGill", pos: 11200 },
+            { name: "Édouard-Montpetit", pos: 13000 },
+            { name: "Canora", pos: 15500 },
+            { name: "Ville-de-Montréal", pos: 16800 },
+            { name: "Côte-de-Liesse", pos: 18500 },
+            { name: "Montpellier", pos: 20000 },
+            { name: "Du Ruisseau", pos: 21500 },
+            { name: "Bois-Franc", pos: 23500 }
+        ];
+        const TOTAL_TRACK_LENGTH = 25000;
 
-	#lovable-badge-close {
-		width: 24px;
-		height: 24px;
-		min-width: 24px;
-		min-height: 24px;
-		cursor: pointer;
-		background: none;
-		border: none;
-		padding: 0;
-		display: flex;
-		align-items: center;
-		justify-content: center;
-		border-radius: 0 var(--badge-radius) var(--badge-radius) 0;
-		flex-shrink: 0;
-		transition: 
-			background-color var(--badge-transition-duration) ease,
-			transform 0.1s ease;
-	}
+        // --- CONFIGURATION SIMULATION ---
+        const config = {
+            numTrains: 6,
+            safetyDistance: 400,
+            maxSpeed: 100 / 3.6, // m/s
+            accel: 0.5,
+            decel: 0.8
+        };
 
-	#lovable-badge-close:hover {
-		background: rgba(255, 255, 255, 0.04);
-	}
+        const trains = [];
+        let leaderTrain = null;
+        let camMode = 0; // 0: Follow, 1: Cockpit, 2: CCTV
 
-	#lovable-badge-close:active {
-		transform: scale(0.92);
-	}
+        // --- SCÈNE THREE.JS ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x020305);
+        scene.fog = new THREE.Fog(0x020305, 50, 400);
 
-	#lovable-badge-close:focus {
-		outline: none;
-	}
+        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 5000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(window.devicePixelRatio);
+        document.getElementById('container').appendChild(renderer.domElement);
 
-	#lovable-badge-close:focus-visible {
-		outline: var(--focus-width) solid var(--focus-color);
-		outline-offset: calc(var(--focus-offset) * -1);
-		z-index: 1;
-	}
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.2);
+        scene.add(ambientLight);
 
-	#lovable-badge-close svg path {
-		fill: var(--badge-text);
-		transition: fill var(--badge-transition-duration) ease;
-	}
+        // --- MATÉRIAUX ---
+        const matConcrete = new THREE.MeshStandardMaterial({ color: 0x1a1a1a });
+        const matNeonGreen = new THREE.MeshStandardMaterial({ color: 0x00ff44, emissive: 0x00ff44, emissiveIntensity: 2 });
+        const matGlass = new THREE.MeshStandardMaterial({ color: 0x88ccff, transparent: true, opacity: 0.2 });
 
-	#lovable-badge-close:hover svg path {
-		fill: var(--badge-text-hover);
-	}
+        // --- CONSTRUCTION MONDE ---
+        
+        // Rails (Single long mesh for performance)
+        const railGeo = new THREE.BoxGeometry(0.2, 0.15, TOTAL_TRACK_LENGTH);
+        const railMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 1, roughness: 0.3 });
+        
+        const trackGroup = new THREE.Group();
+        [-0.7, 0.7].forEach(x => {
+            const r = new THREE.Mesh(railGeo, railMat);
+            r.position.set(x, 0.1, TOTAL_TRACK_LENGTH/2);
+            trackGroup.add(r);
+        });
+        
+        // Viaduc
+        const viaduc = new THREE.Mesh(new THREE.BoxGeometry(10, 1, TOTAL_TRACK_LENGTH), matConcrete);
+        viaduc.position.set(0, -0.5, TOTAL_TRACK_LENGTH/2);
+        trackGroup.add(viaduc);
+        scene.add(trackGroup);
 
-	@media (prefers-reduced-motion: reduce) {
-		#lovable-badge-cta,
-		#lovable-badge-close,
-		#lovable-badge-close svg path {
-			transition: none;
-		}
-		
-		#lovable-badge-cta:active,
-		#lovable-badge-close:active {
-			transform: none;
-		}
-	}
+        // Stations 3D + UI
+        const stationNodes = [];
+        STATIONS.forEach((st, i) => {
+            // Mesh
+            const group = new THREE.Group();
+            group.position.set(0, 0, st.pos);
+            
+            const quai = new THREE.Mesh(new THREE.BoxGeometry(14, 0.5, 120), matConcrete);
+            quai.position.y = 0.25;
+            group.add(quai);
 
-	@media (prefers-contrast: high) {
-		#lovable-badge {
-			--badge-bg: #000;
-			--badge-text: #fff;
-			--badge-text-hover: #fff;
-			border: 2px solid currentColor;
-		}
-		
-		#lovable-badge-cta:focus-visible,
-		#lovable-badge-close:focus-visible {
-			outline-width: 3px;
-		}
-	}
-</style>
-<script defer src="/__l5e/events.js" data-artifact-kind="static_preview" data-artifact-id="a2c99b79bd29842bb5656acea810e8384ad04e71" data-commit-sha="a2c99b79bd29842bb5656acea810e8384ad04e71" data-context-token="v1.eyJwcm9qZWN0X2lkIjoiMmM4YzFhMDYtZjc0Mi00NDIwLWE0NWUtNzJhMzc2MWIyYzUxIiwiYXJ0aWZhY3Rfa2luZCI6InN0YXRpY19wcmV2aWV3IiwiYXJ0aWZhY3RfaWQiOiJhMmM5OWI3OWJkMjk4NDJiYjU2NTZhY2VhODEwZTgzODRhZDA0ZTcxIiwiY29tbWl0X3NoYSI6ImEyYzk5Yjc5YmQyOTg0MmJiNTY1NmFjZWE4MTBlODM4NGFkMDRlNzEiLCJleHAiOjE3ODE2NDIzMjR9.Lclez0GinA-dxXaoidJZ2KS5WdJwZEH5CFip9mnrshQ" data-track-url="/__l5e/trackevents?__lovable_sha=a2c99b79bd29842bb5656acea810e8384ad04e71" data-replay="rrweb" data-replay-sample-rate="1" data-replay-crash-sample-rate="1" data-replay-url="/__l5e/replay?__lovable_sha=a2c99b79bd29842bb5656acea810e8384ad04e71" data-replay-script-url="/__l5e/rrweb-record.js?__lovable_sha=a2c99b79bd29842bb5656acea810e8384ad04e71&amp;__l5e_v=0.1.2-error-event-hardening"></script><meta name="twitter:title" content="REM PCC — Simulateur 3D"><meta name="twitter:description" content="Pilote une rame du REM en mode automatique ou manuel depuis un poste SCADA."></head><body><!--$--><div class="flex h-screen w-screen overflow-hidden bg-slate-950 text-slate-100 font-mono"><aside class="flex h-full w-[380px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-slate-800 bg-slate-900/95 p-4 shadow-2xl"><header class="border-b border-slate-800 pb-3"><div class="text-[10px] uppercase tracking-[0.25em] text-emerald-400">Réseau Express Métropolitain</div><h1 class="mt-1 text-lg font-bold tracking-wide">PCC — Poste de Commande</h1><div class="mt-1 text-[10px] text-slate-500">Centre de contrôle ferroviaire · 26 stations · 4 antennes</div></header><section class="rounded-md border border-slate-800 bg-slate-950/60 p-2"><div class="mb-2 text-[10px] uppercase tracking-widest text-slate-400">Train sélectionné <kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">T</kbd></div><div class="grid grid-cols-2 gap-1.5"><button class="rounded border px-2 py-1.5 text-left text-[10px] transition border-emerald-400 bg-emerald-400/10 text-emerald-200"><div class="flex items-center gap-1.5"><span class="inline-block h-2 w-2 rounded-full" style="background-color:#3ddc84"></span><span class="font-bold">A1</span></div><div class="mt-0.5 truncate text-[9px]">Rive-Sud</div></button><button class="rounded border px-2 py-1.5 text-left text-[10px] transition border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600"><div class="flex items-center gap-1.5"><span class="inline-block h-2 w-2 rounded-full" style="background-color:#4ad6ff"></span><span class="font-bold">A2</span></div><div class="mt-0.5 truncate text-[9px]">Deux-Montagnes</div></button><button class="rounded border px-2 py-1.5 text-left text-[10px] transition border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600"><div class="flex items-center gap-1.5"><span class="inline-block h-2 w-2 rounded-full" style="background-color:#ffb84a"></span><span class="font-bold">A4</span></div><div class="mt-0.5 truncate text-[9px]">Anse-à-l&#x27;Orme</div></button><button class="rounded border px-2 py-1.5 text-left text-[10px] transition border-slate-800 bg-slate-900 text-slate-400 hover:border-slate-600"><div class="flex items-center gap-1.5"><span class="inline-block h-2 w-2 rounded-full" style="background-color:#ff5d8a"></span><span class="font-bold">A5</span></div><div class="mt-0.5 truncate text-[9px]">Aéroport</div></button></div></section><section class="grid grid-cols-3 gap-2"><div class="flex flex-col items-center gap-1 rounded-md border border-slate-800 bg-slate-950/60 p-2"><span class="h-4 w-4 rounded-full bg-emerald-400 shadow-[0_0_16px] shadow-emerald-400"></span><span class="text-[9px] font-bold tracking-widest text-emerald-300">ATC</span></div><div class="flex flex-col items-center gap-1 rounded-md border border-slate-800 bg-slate-950/60 p-2"><span class="h-4 w-4 rounded-full bg-amber-950"></span><span class="text-[9px] font-bold tracking-widest text-slate-600">MANUEL</span></div><div class="flex flex-col items-center gap-1 rounded-md border border-slate-800 bg-slate-950/60 p-2"><span class="h-4 w-4 rounded-full bg-red-950"></span><span class="text-[9px] font-bold tracking-widest text-slate-600">URGENCE</span></div></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3"><div class="flex items-baseline justify-between"><span class="text-[10px] uppercase tracking-widest text-slate-400">Vitesse</span><span class="text-2xl font-bold tabular-nums text-emerald-300">0.0<span class="ml-1 text-xs text-slate-500">km/h</span></span></div><div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800"><div class="h-full bg-gradient-to-r from-emerald-600 to-emerald-300 transition-[width] duration-150 ease-out" style="width:0%"></div></div><div class="mt-1 flex justify-between text-[9px] text-slate-500"><span>0</span><span>VMAX 97</span><span>100</span></div></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3"><div class="flex items-baseline justify-between"><span class="text-[10px] uppercase tracking-widest text-slate-400">Progression inter-station</span><span class="text-sm font-bold tabular-nums text-cyan-300">0<!-- -->%</span></div><div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800"><div class="h-full bg-gradient-to-r from-cyan-700 to-cyan-300 transition-[width] duration-150 ease-out" style="width:0%"></div></div><div class="mt-2 flex items-center justify-between text-[11px]"><span class="truncate text-slate-300">Brossard</span><span class="px-2 text-slate-600">→</span><span class="truncate text-emerald-300">Du Quartier</span></div></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3"><div class="flex items-baseline justify-between"><span class="text-[10px] uppercase tracking-widest text-slate-400">Embarquement</span><span class="text-sm font-bold tabular-nums text-amber-300">—</span></div><div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-slate-800"><div class="h-full bg-gradient-to-r from-amber-700 to-amber-300 transition-[width] duration-150 ease-out" style="width:0%"></div></div></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3"><div class="flex items-baseline justify-between"><span class="text-[10px] uppercase tracking-widest text-slate-400">Portes</span><span class="text-xs font-bold tabular-nums text-slate-400">FERMÉES</span></div><button class="mt-2 w-full rounded border px-2 py-1.5 text-[11px] font-bold tracking-widest uppercase transition border-slate-700 bg-slate-900 text-slate-300 hover:border-slate-500">Ouvrir portes</button><div class="mt-1 text-[9px] text-slate-500">Touche <kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">O</kbd> · le train ne peut repartir tant que les portes sont ouvertes</div></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3"><div class="text-[10px] uppercase tracking-widest text-slate-400">Caméra</div><div class="mt-1 text-sm font-semibold text-slate-100">Poursuite</div></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-2"><div class="mb-1 flex items-center justify-between text-[10px] uppercase tracking-widest text-slate-400"><span>Carte du réseau</span><span class="text-slate-600">N ↑</span></div><svg viewBox="0 0 340 260" class="h-auto w-full"><polyline points="329.5,253.5 312.3,227.3 295.2,202.8 270.2,166.8 250.4,130.8" fill="none" stroke="#3ddc84" stroke-width="3" stroke-opacity="1" stroke-linecap="round" stroke-linejoin="round"></polyline><polyline points="250.4,130.8 255.7,122.6 235.9,101.4 228.0,89.9 224.0,81.8 179.2,63.8 155.5,58.9 135.7,51.5 112.0,42.5 87.0,34.3 61.9,25.3 36.9,15.5 10.5,6.5" fill="none" stroke="#4ad6ff" stroke-width="2" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round"></polyline><polyline points="250.4,130.8 255.7,122.6 235.9,101.4 228.0,89.9 224.0,81.8 179.2,63.8 155.5,58.9 131.8,73.6 105.4,78.5 81.7,83.4 56.7,88.3 29.0,93.2" fill="none" stroke="#ffb84a" stroke-width="2" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round"></polyline><polyline points="250.4,130.8 255.7,122.6 235.9,101.4 228.0,89.9 224.0,81.8 179.2,63.8 155.5,58.9 131.8,73.6 134.4,81.8 116.0,91.6" fill="none" stroke="#ff5d8a" stroke-width="2" stroke-opacity="0.55" stroke-linecap="round" stroke-linejoin="round"></polyline><g><circle cx="329.4573643410853" cy="253.45911949685535" r="2.2" fill="#3ddc84" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="312.3255813953488" cy="227.29559748427673" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="295.1937984496124" cy="202.7672955974843" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="270.1550387596899" cy="166.79245283018867" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="250.3875968992248" cy="130.8176100628931" r="3.6" fill="#e2e8f0" stroke="#0b1220" stroke-width="0.8"></circle><text x="255.3875968992248" y="133.8176100628931" font-size="7" fill="#cbd5e1" font-family="ui-monospace, monospace">Gare Centrale</text></g><g><circle cx="255.65891472868216" cy="122.64150943396226" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="235.89147286821705" cy="101.38364779874215" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="227.984496124031" cy="89.93710691823901" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="224.03100775193798" cy="81.7610062893082" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="179.2248062015504" cy="63.77358490566036" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="155.50387596899225" cy="58.86792452830187" r="3.6" fill="#e2e8f0" stroke="#0b1220" stroke-width="0.8"></circle><text x="160.50387596899225" y="61.86792452830187" font-size="7" fill="#cbd5e1" font-family="ui-monospace, monospace">Bois-Franc</text></g><g><circle cx="135.73643410852713" cy="51.509433962264126" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="112.01550387596899" cy="42.51572327044025" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="86.97674418604652" cy="34.339622641509436" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="61.93798449612403" cy="25.34591194968553" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="36.89922480620155" cy="15.534591194968556" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="10.542635658914728" cy="6.540880503144649" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="131.78294573643413" cy="73.58490566037736" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="105.42635658914729" cy="78.49056603773587" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="81.70542635658916" cy="83.39622641509436" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="56.666666666666664" cy="88.30188679245285" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="28.992248062015502" cy="93.20754716981133" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="134.41860465116278" cy="81.7610062893082" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g><g><circle cx="115.96899224806201" cy="91.57232704402517" r="2.2" fill="#cbd5e1" stroke="#0b1220" stroke-width="0.8"></circle></g></svg></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3"><div class="mb-2 flex items-center gap-2 text-[10px] uppercase tracking-widest text-slate-400"><span class="inline-block h-2 w-2 rounded-full" style="background-color:#3ddc84"></span>Ligne <!-- -->A1 · Rive-Sud</div><ol class="space-y-0.5 text-[11px]"><li class="flex items-center gap-2"><span class="inline-block h-2 w-2 rounded-full bg-cyan-400"></span><span class="truncate text-cyan-200">Brossard</span></li><li class="flex items-center gap-2"><span class="inline-block h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_8px] shadow-emerald-400"></span><span class="truncate text-emerald-300">Du Quartier</span></li><li class="flex items-center gap-2"><span class="inline-block h-2 w-2 rounded-full bg-slate-600"></span><span class="truncate text-slate-400">Panama</span></li><li class="flex items-center gap-2"><span class="inline-block h-2 w-2 rounded-full bg-slate-600"></span><span class="truncate text-slate-400">Île-des-Sœurs</span></li><li class="flex items-center gap-2"><span class="inline-block h-2 w-2 rounded-full bg-slate-600"></span><span class="truncate text-slate-400">Gare Centrale</span></li></ol></section><section class="rounded-md border border-slate-800 bg-slate-950/60 p-3 text-[11px] leading-relaxed text-slate-300"><div class="mb-1 text-[10px] uppercase tracking-widest text-slate-400">Commandes</div><div><kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">T</kbd> Changer de train</div><div><kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">M</kbd> ATC / Manuel</div><div><kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">Z</kbd>/<kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">↑</kbd> Accélérer · <kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">S</kbd>/<kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">↓</kbd> Freiner</div><div><kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">Espace</kbd> Arrêt d&#x27;urgence</div><div><kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">C</kbd> Caméra (Poursuite / Cockpit / CCTV)</div><div><kbd class="mx-0.5 inline-block min-w-[1.6em] rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-center text-[10px] font-semibold text-slate-100 shadow-[inset_0_-1px_0] shadow-slate-900">O</kbd> Ouverture manuelle des portes</div></section></aside><main class="relative flex-1"><div class="absolute inset-0"></div><div class="pointer-events-none absolute top-3 right-3 rounded-md border border-slate-700/60 bg-slate-950/70 px-3 py-1.5 text-[11px] uppercase tracking-widest text-emerald-300 backdrop-blur">● LIVE · <!-- -->Poursuite<!-- --> · <!-- -->A1</div></main></div><script>(function(t){let s;try{s=JSON.parse(sessionStorage.getItem(t.storageKey)||"{}")}catch(e){console.error(e);return}const c=t.key||window.history.state?.__TSR_key,r=c?s[c]:void 0;if(t.shouldScrollRestoration&&r&&typeof r=="object"&&Object.keys(r).length>0){for(const e in r){const o=r[e];if(!o||typeof o!="object")continue;const l=o.scrollX,i=o.scrollY;if(!(!Number.isFinite(l)||!Number.isFinite(i))){if(e==="window")window.scrollTo({top:i,left:l,behavior:t.behavior});else if(e){let n;try{n=document.querySelector(e)}catch{continue}n&&(n.scrollLeft=l,n.scrollTop=i)}}}return}const a=window.location.hash.split("#",2)[1];if(a){const e=window.history.state?.__hashScrollIntoViewOptions??!0;if(e){const o=document.getElementById(a);o&&o.scrollIntoView(e)}return}window.scrollTo({top:0,left:0,behavior:t.behavior})})({"storageKey":"tsr-scroll-restoration-v1_3","shouldScrollRestoration":true});document.currentScript.remove()</script><!--/$--><script class="$tsr" id="$tsr-stream-barrier">(self.$R=self.$R||{})["tsr"]=[];self.$_TSR={h(){this.hydrated=!0,this.c()},e(){this.streamEnded=!0,this.c()},c(){this.hydrated&&this.streamEnded&&(delete self.$_TSR,delete self.$R.tsr)},p(e){this.initialized?e():this.buffer.push(e)},buffer:[]};$_TSR.router=($R=>$R[0]={manifest:$R[1]={routes:$R[2]={__root__:$R[3]={preloads:$R[4]=["/assets/index-Cbw3D_h-.js"],assets:$R[5]=[$R[6]={tag:"script",attrs:$R[7]={type:"module",async:!0},children:"import(\"/assets/index-Cbw3D_h-.js\")"}]},"/":$R[8]={preloads:$R[9]=["/assets/routes-ajch6__R.js"]}}},matches:$R[10]=[$R[11]={i:"__root__",u:1781638724624,s:"success",ssr:!0},$R[12]={i:"",u:1781638724624,s:"success",ssr:!0}],lastMatchId:""})($R["tsr"]);$_TSR.e();document.currentScript.remove()</script><script type="module" async="">import("/assets/index-Cbw3D_h-.js")</script><script src="https://cdn.gpteng.co/lovable.js" type="module"></script>
-<aside
-	id="lovable-badge"
-	role="complementary"
-	dir="ltr"
-	lang="en"
-	aria-label="Edit with Lovable">
-	<a
-		id="lovable-badge-cta" 
-		target="_blank" 
-		href="https://lovable.dev/projects/2c8c1a06-f742-4420-a45e-72a3761b2c51?utm_source=lovable-badge"
-		rel="noopener nofollow"
-		aria-label="Edit with Lovable">
-		<span id="lovable-badge-text">Edit with</span>
-		<svg xmlns="http://www.w3.org/2000/svg" width="52" height="16" fill="none" viewBox="0 0 52 16">
-  <path fill="#FCFBF8" fill-rule="evenodd" d="M20.318 5.25c.643 0 1.206.14 1.69.418a2.81 2.81 0 0 1 1.118 1.191c.266.513.4 1.115.4 1.807s-.134 1.296-.4 1.812a2.81 2.81 0 0 1-1.118 1.193c-.484.278-1.047.418-1.69.418s-1.208-.14-1.695-.418a2.85 2.85 0 0 1-1.125-1.193c-.262-.516-.393-1.12-.393-1.812s.131-1.294.393-1.807a2.848 2.848 0 0 1 1.125-1.191c.487-.279 1.052-.418 1.695-.418Zm0 1.425c-.27 0-.504.076-.7.228-.193.147-.34.37-.443.67-.102.295-.153.66-.153 1.093 0 .435.05.801.153 1.1.102.3.25.524.443.676.196.147.43.22.7.22.27 0 .502-.073.694-.22.193-.152.341-.375.443-.67.103-.299.153-.667.153-1.106 0-.65-.112-1.145-.337-1.481a1.08 1.08 0 0 0-.953-.51ZM32.7 5.25c.61 0 1.127.1 1.549.3.422.197.74.48.953.849.217.368.325.809.325 1.32v2.704c0 .29.02.562.062.812.044.245.108.4.19.466V12h-1.935a5.895 5.895 0 0 1-.105-.684 7.745 7.745 0 0 1-.02-.228 2.293 2.293 0 0 1-.151.203c-.205.242-.47.437-.793.584-.32.143-.685.215-1.094.215-.406 0-.77-.08-1.094-.24a1.845 1.845 0 0 1-.756-.682 1.984 1.984 0 0 1-.27-1.045c0-.606.178-1.069.535-1.388.356-.324.87-.534 1.542-.633l1.125-.16c.225-.032.403-.074.534-.123a.622.622 0 0 0 .288-.196.549.549 0 0 0 .093-.327.65.65 0 0 0-.11-.367.702.702 0 0 0-.32-.27c-.14-.07-.31-.105-.51-.105-.32 0-.576.083-.768.251-.193.164-.298.39-.314.676h-1.923c.016-.434.147-.82.393-1.155.25-.34.596-.604 1.039-.792.442-.189.954-.283 1.535-.283Zm.99 3.498a.98.98 0 0 1-.215.14 2.49 2.49 0 0 1-.584.178l-.473.092c-.315.061-.553.156-.713.283-.155.127-.233.305-.233.534 0 .23.084.412.252.547.168.135.383.203.645.203s.494-.058.694-.173c.201-.118.355-.282.461-.49.11-.21.166-.448.166-.714v-.6Zm4.526-2.375c.065-.125.138-.243.221-.349.197-.25.437-.44.719-.571.282-.135.6-.203.952-.203.528 0 .988.138 1.377.412.389.275.688.67.896 1.186.21.512.314 1.12.314 1.824 0 .7-.107 1.309-.32 1.825-.213.512-.518.906-.915 1.18-.393.275-.854.412-1.383.412-.352 0-.667-.062-.946-.184a1.832 1.832 0 0 1-.7-.554 2.2 2.2 0 0 1-.234-.383V12h-1.843V3h1.862v3.373Zm1.284.296c-.274 0-.51.085-.707.253-.192.163-.338.397-.436.7a3.376 3.376 0 0 0-.148 1.05c0 .406.05.759.148 1.058.098.299.243.53.436.694.197.164.433.246.707.246.279 0 .512-.082.7-.246.193-.164.336-.395.43-.694.099-.3.148-.652.148-1.058 0-.405-.05-.757-.147-1.056-.095-.299-.238-.53-.43-.694a1.015 1.015 0 0 0-.7-.253Zm9.416-1.419c.602 0 1.136.131 1.604.393.466.262.829.643 1.086 1.143.263.5.394 1.097.394 1.794 0 .25-.002.449-.006.596H47.51c.018.288.071.538.164.75a1.3 1.3 0 0 0 .491.596c.214.13.465.196.757.196.319 0 .583-.082.792-.246.209-.167.34-.403.393-.706h1.862a2.48 2.48 0 0 1-.485 1.235 2.54 2.54 0 0 1-1.051.805c-.439.188-.949.283-1.53.283-.655 0-1.225-.125-1.708-.375a2.672 2.672 0 0 1-1.13-1.143c-.267-.508-.4-1.137-.4-1.887 0-.712.14-1.327.418-1.843a2.86 2.86 0 0 1 1.155-1.186c.491-.27 1.051-.405 1.678-.405Zm-.044 1.345c-.274 0-.516.068-.725.203a1.29 1.29 0 0 0-.479.59 2.045 2.045 0 0 0-.132.498h2.562a1.873 1.873 0 0 0-.138-.602 1.061 1.061 0 0 0-.418-.516 1.243 1.243 0 0 0-.67-.173Z" clip-rule="evenodd"/>
-  <path fill="#FCFBF8" d="m26.605 9.995 1.342-4.566h1.924L27.628 12h-2.07l-2.33-6.57h1.98l1.397 4.565Zm-13.013.143h2.256c1.632 0 1.421 1.837 1.418 1.861h-5.603V3h1.93v7.138Zm31.516 1.861h-1.862V3h1.862v8.999Z"/>
-  <path fill="url(#a)" fill-rule="evenodd" d="M2.7 3c1.492 0 2.7 1.192 2.7 2.663v1.012h.9c1.49 0 2.7 1.192 2.7 2.662S7.791 12 6.3 12H0V5.663C0 4.193 1.209 3 2.7 3Z" clip-rule="evenodd"/>
-  <defs>
-    <radialGradient id="a" cx="0" cy="0" r="1" gradientTransform="matrix(-1.54236 7.07838 -10.231 -2.15602 4.627 5.022)" gradientUnits="userSpaceOnUse">
-      <stop offset=".106" stop-color="#FE7B02"/>
-      <stop offset=".394" stop-color="#FE3F21"/>
-      <stop offset=".608" stop-color="#F858BC"/>
-      <stop offset=".929" stop-color="#575ECF"/>
-    </radialGradient>
-  </defs>
-</svg>
+            const structure = new THREE.Mesh(new THREE.BoxGeometry(15, 8, 120), matGlass);
+            structure.position.y = 4;
+            group.add(structure);
 
+            const neon = new THREE.Mesh(new THREE.BoxGeometry(15.1, 0.2, 120.1), matNeonGreen);
+            neon.position.y = 8;
+            group.add(neon);
 
-	</a>
-	
-	<span id="lovable-badge-divider" aria-hidden="true"></span>
-	
-	<button 
-		id="lovable-badge-close"
-		aria-label="Dismiss"
-		title="Dismiss"
-		type="button">
-		<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 16 16" aria-hidden="true">
-			<path d="M10.646 4.646a.5.5 0 1 1 .707.708L8.707 8l2.646 2.646a.5.5 0 1 1-.707.707L8 8.707l-2.646 2.646a.5.5 0 1 1-.708-.707L7.293 8 4.646 5.354a.5.5 0 1 1 .708-.708L8 7.293l2.646-2.647Z"/>
-		</svg>
-	</button>
-</aside>
-<script>
-	// Don't show the lovable-badge if the page is in an iframe or if it's being rendered by puppeteer (screenshot service)
-	if (window.self !== window.top || navigator.userAgent.includes('puppeteer')) {
-		var badge = document.getElementById('lovable-badge');
-		if (badge) {
-			badge.style.display = 'none';
-		}
-	}
+            // Voyageurs
+            for(let j=0; j<20; j++) {
+                const person = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.15, 1.7), new THREE.MeshStandardMaterial({color: Math.random()*0xffffff}));
+                person.position.set((Math.random()-0.5)*10, 1.2, (Math.random()-0.5)*100);
+                group.add(person);
+            }
 
-	// Add click event listener to close button with animation
-	var closeButton = document.getElementById('lovable-badge-close');
-	if (closeButton) {
-		closeButton.addEventListener('click', function(event) {
-			event.preventDefault();
-			event.stopPropagation();
-			var badge = document.getElementById('lovable-badge');
-			if (badge) {
-				badge.classList.add('closing');
-				setTimeout(function() {
-					if (badge) {
-						badge.style.display = 'none';
-					}
-				}, 240);
-			}
-		});
-	}
-</script>
-</body></html>
+            scene.add(group);
+
+            // UI SCADA
+            const el = document.createElement('div');
+            el.className = "flex items-center gap-2 py-1 transition-all duration-500 opacity-40";
+            el.id = `st-${i}`;
+            el.innerHTML = `<div class="w-2 h-2 rounded-full bg-gray-600"></div><span class="truncate">${st.name}</span>`;
+            document.getElementById('station-list').appendChild(el);
+            stationNodes.push(el);
+        });
+
+        // --- CLASSE TRAIN ---
+        class REMTrain {
+            constructor(id, startPos, isLeader = false) {
+                this.id = id;
+                this.pos = startPos;
+                this.speed = 0;
+                this.mode = 'AUTO';
+                this.isLeader = isLeader;
+                this.doorsOpen = false;
+                this.doorTimer = 0;
+                this.emergency = false;
+                this.currentStation = 0;
+                
+                // Group 3D
+                this.mesh = new THREE.Group();
+                const body = new THREE.Mesh(new THREE.BoxGeometry(2.8, 3.2, 40), new THREE.MeshStandardMaterial({color: 0xdddddd}));
+                body.position.y = 2;
+                this.mesh.add(body);
+
+                const stripe = new THREE.Mesh(new THREE.BoxGeometry(2.82, 0.4, 40), matNeonGreen);
+                stripe.position.y = 1.3;
+                this.mesh.add(stripe);
+
+                // Phares
+                const light = new THREE.SpotLight(0xffffaa, 10, 150, 0.5, 0.5);
+                light.position.set(0, 1.5, 20);
+                light.target.position.set(0, 1, 100);
+                this.mesh.add(light);
+                this.mesh.add(light.target);
+
+                scene.add(this.mesh);
+            }
+
+            update(delta, nextTrainPos) {
+                if (this.emergency) {
+                    this.speed = Math.max(0, this.speed - config.decel * 4);
+                } else if (this.doorsOpen) {
+                    this.speed = 0;
+                    this.doorTimer -= delta;
+                    if (this.doorTimer <= 0) this.doorsOpen = false;
+                } else {
+                    // Calcul distance sécurité
+                    let distToNext = (nextTrainPos - this.pos + TOTAL_TRACK_LENGTH) % TOTAL_TRACK_LENGTH;
+                    
+                    if (this.isLeader && this.mode === 'MANUAL') {
+                        this.handleManualDrive();
+                    } else {
+                        this.handleAutoDrive(distToNext);
+                    }
+                }
+
+                this.pos = (this.pos + this.speed) % TOTAL_TRACK_LENGTH;
+                this.mesh.position.z = this.pos;
+            }
+
+            handleAutoDrive(distToNext) {
+                const targetStation = STATIONS[this.currentStation];
+                let distToStation = targetStation.pos - this.pos;
+                
+                // Si la station est derrière, elle est sur le prochain tour (simple loop)
+                if (distToStation < -100) {
+                    this.currentStation = (this.currentStation + 1) % STATIONS.length;
+                    return;
+                }
+
+                // Logique de freinage station vs sécurité train
+                let targetSpeed = config.maxSpeed;
+
+                if (distToStation < 300) {
+                    targetSpeed = Math.max(0, (distToStation / 300) * config.maxSpeed);
+                    if (distToStation < 2 && this.speed < 0.5) {
+                        this.speed = 0;
+                        if (!this.doorsOpen) {
+                            this.doorsOpen = true;
+                            this.doorTimer = 6;
+                        }
+                    }
+                }
+
+                // Évitement collision
+                if (distToNext < config.safetyDistance) {
+                    targetSpeed = Math.min(targetSpeed, (distToNext / config.safetyDistance) * config.maxSpeed);
+                }
+
+                if (this.speed < targetSpeed) this.speed += config.accel * 0.1;
+                else this.speed -= config.decel * 0.1;
+            }
+
+            handleManualDrive() {
+                if (keys['KeyW'] || keys['KeyZ']) this.speed = Math.min(config.maxSpeed, this.speed + 0.05);
+                else if (keys['KeyS']) this.speed = Math.max(0, this.speed - 0.1);
+                else this.speed = Math.max(0, this.speed - 0.01);
