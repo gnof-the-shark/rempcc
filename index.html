@@ -189,6 +189,18 @@
     maxDwellSeconds: 55
   };
 
+  const model = {
+    stationKeySeparator: '::',
+    passengerArrivalWindowSeconds: 10,
+    crowdIncidentBoostWindowSeconds: 2,
+    pixelToKmScale: 0.03, // 1px ~= 30m
+    accelKmhPerStep: 7,
+    decelKmhPerStep: 9,
+    boardPassengersPerSecondUnit: 18,
+    alightPassengersPerSecondUnit: 22,
+    overcrowdDwellPenaltySeconds: 8
+  };
+
   const sharedTrunk = [
     { name: 'Gare Centrale', x: 740, y: 430, demand: 2.4, platformCapacity: 1100 },
     { name: 'McGill', x: 700, y: 390, demand: 2.1, platformCapacity: 980 },
@@ -246,6 +258,7 @@
     network: {},
     trains: [],
     incidents: [],
+    incidentSeq: 1,
     replaySnapshots: [],
     eventLog: []
   };
@@ -268,10 +281,14 @@
     replayInfo: document.getElementById('replayInfo')
   };
 
+  function makeStationKey(branch, name) {
+    return `${branch}${model.stationKeySeparator}${encodeURIComponent(name)}`;
+  }
+
   function buildNetwork() {
     Object.entries(branchDefs).forEach(([branch, stations]) => {
       const enriched = stations.map((station, i) => ({
-        key: `${branch}:${station.name}`,
+        key: makeStationKey(branch, station.name),
         branch,
         idx: i,
         ...station,
@@ -319,7 +336,10 @@
   }
 
   function logEvent(level, msg) {
-    const hhmmss = toClock(state.simMinutes).split(' ')[1] + ':00';
+    const m = Math.floor(state.simMinutes % 1440);
+    const h = Math.floor(m / 60);
+    const mm = m % 60;
+    const hhmmss = `${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}:00`;
     const entry = { hhmmss, level, msg };
     state.eventLog.push(entry);
     if (state.eventLog.length > 200) state.eventLog.shift();
@@ -343,24 +363,29 @@
 
   function isServiceOpen() {
     const m = state.simMinutes % 1440;
-    return m >= config.serviceStartMinutes && m <= (config.serviceEndMinutes % 1440 + 1440) % 1440;
+    const start = config.serviceStartMinutes % 1440;
+    const end = config.serviceEndMinutes % 1440;
+    if (start <= end) return m >= start && m <= end;
+    return m >= start || m <= end;
   }
 
   function stationByKey(key) {
-    const [branch, name] = key.split(':');
+    const [branch, encodedName] = key.split(model.stationKeySeparator);
+    const name = decodeURIComponent(encodedName || '');
     return state.network[branch]?.find((s) => s.name === name) || null;
   }
 
   function updatePassengerDemand(dtSeconds) {
     const serviceFactor = isServiceOpen() ? 1 : 0.2;
     Object.values(state.network).flat().forEach((station) => {
+      // Courbe quotidienne simplifiée: base 0.75, amplitude 0.45, pic pendant les pointes.
       const peak = Math.sin((state.simMinutes % 1440) / 1440 * Math.PI * 2 - Math.PI / 2) * 0.45 + 0.75;
-      const add = station.demand * peak * serviceFactor * (dtSeconds / 10);
+      const add = station.demand * peak * serviceFactor * (dtSeconds / model.passengerArrivalWindowSeconds);
       station.waiting = Math.min(station.platformCapacity * 2, station.waiting + add);
 
       const overloadIncident = state.incidents.find((it) => it.type === 'crowd' && it.stationKey === station.key);
       if (overloadIncident) {
-        station.waiting = Math.min(station.platformCapacity * 2, station.waiting + 1.4 * (dtSeconds / 2));
+        station.waiting = Math.min(station.platformCapacity * 2, station.waiting + 1.4 * (dtSeconds / model.crowdIncidentBoostWindowSeconds));
       }
     });
   }
@@ -369,7 +394,7 @@
     const dx = b.x - a.x;
     const dy = b.y - a.y;
     const pixels = Math.sqrt(dx * dx + dy * dy);
-    return pixels * 0.03;
+    return pixels * model.pixelToKmScale;
   }
 
   function trainCurrentStations(train) {
@@ -451,8 +476,8 @@
     train.blockedBySignal = blocked;
     train.targetKmh = blocked ? 0 : config.targetRunKmh * weatherPenalty;
 
-    if (train.speedKmh < train.targetKmh) train.speedKmh = Math.min(train.targetKmh, train.speedKmh + 7);
-    if (train.speedKmh > train.targetKmh) train.speedKmh = Math.max(train.targetKmh, train.speedKmh - 9);
+    if (train.speedKmh < train.targetKmh) train.speedKmh = Math.min(train.targetKmh, train.speedKmh + model.accelKmhPerStep);
+    if (train.speedKmh > train.targetKmh) train.speedKmh = Math.max(train.targetKmh, train.speedKmh - model.decelKmhPerStep);
 
     const { from, to, stations } = trainCurrentStations(train);
     if (!from || !to) {
@@ -490,7 +515,13 @@
       const crowdRatio = station.waiting / station.platformCapacity;
       const dwell = Math.min(
         config.maxDwellSeconds,
-        Math.max(config.minDwellSeconds, config.minDwellSeconds + Math.round(board / 18) + Math.round(alight / 22) + (crowdRatio > 1 ? 8 : 0))
+        Math.max(
+          config.minDwellSeconds,
+          config.minDwellSeconds
+            + Math.round(board / model.boardPassengersPerSecondUnit)
+            + Math.round(alight / model.alightPassengersPerSecondUnit)
+            + (crowdRatio > 1 ? model.overcrowdDwellPenaltySeconds : 0)
+        )
       );
 
       train.dwellRemaining = dwell;
@@ -678,7 +709,7 @@
     };
 
     state.incidents.push({
-      id: `INC-${Date.now()}-${Math.floor(Math.random() * 999)}`,
+      id: `INC-${state.incidentSeq++}`,
       type,
       stationKey: station.key,
       remaining: durations[type] || 180,
