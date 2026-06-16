@@ -454,6 +454,8 @@
     const weatherPenalty = state.incidents.some((i) => i.type === 'weather') ? 0.7 : 1;
 
     if (!service) {
+      const station = trainAtStation(train);
+      if (station) setDoors(train, station, false);
       train.speedKmh = 0;
       train.targetKmh = 0;
       train.state = 'park';
@@ -626,7 +628,7 @@
         ctx.lineWidth = selected ? 3 : 2;
         ctx.strokeRect(x - 5, y - 5, 10, 10);
 
-        if (branch === 'A1' || !sharedTrunk.some((x0) => x0.name === st.name)) {
+        if (branch === 'A1' || !sharedTrunk.some((sharedStation) => sharedStation.name === st.name)) {
           ctx.fillStyle = '#b7c9ea';
           ctx.font = '11px monospace';
           ctx.fillText(st.name, x + 8, y - 8);
@@ -708,6 +710,7 @@
 
     if (type === 'signal') station.signalOverrideRed = true;
 
+    // Durées réalistes simplifiées (secondes): porte, signal, surcharge quai, météo.
     const durations = { door: 180, signal: 240, crowd: 300, weather: 480 };
     const labels = {
       door: `Blocage porte palière @ ${station.name}`,
