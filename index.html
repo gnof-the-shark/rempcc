@@ -3,64 +3,112 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PCC REM Montréal - Réseau Intégral</title>
+    <title>PCC REM Montréal - Centre de Contrôle SCADA</title>
     <style>
+        :root {
+            --bg-main: #0a0f1d;
+            --bg-panel: rgba(16, 24, 48, 0.75);
+            --border-panel: rgba(0, 255, 102, 0.25);
+            --neon-green: #00ff66;
+            --neon-red: #ff3333;
+            --neon-blue: #00d9ff;
+            --neon-yellow: #ffff00;
+            --text-muted: #627b9b;
+        }
+
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%;
-            overflow: hidden; font-family: 'Courier New', Courier, monospace;
-            background-color: #060911; color: #00ff66;
+            overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-main); color: #e1e7f0;
         }
         
-        #main-container { display: flex; flex-direction: column; width: 100%; height: 100%; }
+        /* Grille cybernétique en arrière-plan global */
+        #main-container { 
+            display: flex; flex-direction: column; width: 100%; height: 100%; 
+            background-image: linear-gradient(rgba(18, 28, 54, 0.3) 1px, transparent 1px), linear-gradient(90deg, rgba(18, 28, 54, 0.3) 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
 
         #header {
-            height: 40px; background: #0c1322; border-bottom: 2px solid #00ff66;
-            display: flex; align-items: center; padding: 0 20px; justify-content: space-between;
+            height: 45px; background: rgba(10, 15, 29, 0.9); border-bottom: 1px solid var(--border-panel);
+            display: flex; align-items: center; padding: 0 25px; justify-content: space-between;
+            backdrop-filter: blur(10px); box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            z-index: 10;
         }
-        #pcc-title { font-weight: bold; font-size: 14px; letter-spacing: 2px; }
+        #pcc-title { font-weight: 700; font-size: 13px; letter-spacing: 2px; color: #fff; display: flex; align-items: center; gap: 10px; }
+        .live-dot { width: 8px; height: 8px; background: var(--neon-green); border-radius: 50%; box-shadow: 0 0 8px var(--neon-green); animation: pulse 2s infinite; }
 
-        #workspace { flex: 1; display: flex; overflow: hidden; }
+        /* Espaces d'exploitation */
+        #workspace { flex: 1; display: flex; overflow: hidden; padding: 15px; gap: 15px; }
         
-        #simulation-zone { flex: 2; position: relative; background: #080d16; border-right: 1px solid #1a2942; }
+        /* Zone Carte Synoptique Évoluée */
+        #simulation-zone { 
+            flex: 2; position: relative; background: var(--bg-panel); 
+            border: 1px solid var(--border-panel); border-radius: 8px;
+            backdrop-filter: blur(4px); box-shadow: inset 0 0 30px rgba(0,0,0,0.6);
+            overflow: hidden;
+        }
         canvas { width: 100%; height: 100%; display: block; }
 
-        #side-panels { flex: 1; display: flex; flex-direction: column; background: #090f1a; min-width: 400px; }
+        /* Panneaux Latéraux Sci-Fi Réalistes */
+        #side-panels { flex: 1; display: flex; flex-direction: column; gap: 15px; min-width: 420px; max-width: 460px; }
         
+        /* Bloc Vidéo / Cockpit Matriciel */
         #cctv-screen {
-            height: 250px; background: #000; border-bottom: 2px solid #1a2942;
+            height: 260px; background: #040712; border: 1px solid var(--border-panel); border-radius: 8px;
             position: relative; overflow: hidden; display: flex; flex-direction: column;
-            justify-content: center; align-items: center; text-align: center; color: #00ff66;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.7);
         }
-        #cctv-canvas { width: 100%; height: 100%; position: absolute; top:0; left:0; pointer-events: none; }
-        #cctv-overlay { position: absolute; top: 10px; left: 10px; font-size: 11px; font-weight: bold; z-index: 2; text-shadow: 1px 1px #000; }
-        #manual-hud { position: absolute; bottom: 10px; width: 90%; display: flex; justify-content: space-between; font-weight: bold; background: rgba(0,0,0,0.7); padding: 5px; box-sizing: border-box; }
+        #cctv-canvas { width: 100%; height: 100%; position: absolute; top:0; left:0; pointer-events: none; z-index: 1; }
+        #cctv-overlay { position: absolute; top: 12px; left: 15px; font-size: 11px; font-family: monospace; font-weight: bold; z-index: 2; color: var(--neon-blue); text-shadow: 0 0 5px rgba(0,217,255,0.5); }
+        #manual-hud { position: absolute; bottom: 12px; left: 5%; width: 90%; display: flex; justify-content: space-between; font-family: monospace; font-size: 11px; font-weight: bold; background: rgba(6,11,25,0.85); padding: 8px 12px; box-sizing: border-box; border-radius: 4px; border: 1px solid rgba(0,255,102,0.2); z-index: 2; backdrop-filter: blur(5px); }
 
-        #pcc-dashboard { flex: 1; display: flex; flex-direction: column; padding: 15px; box-sizing: border-box; gap: 15px; }
-        #controls { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        /* Tableau d'exploitation technique */
+        #pcc-dashboard { 
+            flex: 1; display: flex; flex-direction: column; padding: 20px; box-sizing: border-box; 
+            background: var(--bg-panel); border: 1px solid var(--border-panel); border-radius: 8px;
+            backdrop-filter: blur(4px); gap: 15px;
+        }
+        
+        .panel-label { font-size: 10px; font-weight: 700; color: var(--text-muted); letter-spacing: 1.5px; text-transform: uppercase; margin-bottom: 5px; }
+        #controls { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
         select, button {
-            background: #121b2d; color: #00ff66; border: 1px solid #00ff66;
-            padding: 8px; font-family: inherit; font-size: 12px; font-weight: bold;
-            cursor: pointer; border-radius: 4px; width: 100%;
+            background: #121c36; color: #fff; border: 1px solid rgba(255,255,255,0.15);
+            padding: 10px; font-family: inherit; font-size: 11px; font-weight: 600;
+            cursor: pointer; border-radius: 5px; transition: all 0.2s ease;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        button:hover { background: #00ff66; color: #060911; }
-        .btn-alert { border-color: #ff3333; color: #ff3333; }
-        .btn-alert:hover { background: #ff3333; color: #fff; }
-        .btn-active { background: #00ff66 !important; color: #060911 !important; }
+        select { width: 100%; background-image: radial-gradient(circle at top right, #1a294d, #121c36); color: var(--neon-blue); border-color: rgba(0,217,255,0.3); }
+        select:focus { outline: none; border-color: var(--neon-blue); }
+        button:hover { background: rgba(255,255,255,0.1); border-color: #fff; }
+        
+        .btn-alert { border-color: rgba(255,51,51,0.4); color: #ff5555; background: rgba(255,51,51,0.05); }
+        .btn-alert:hover { background: var(--neon-red); color: #fff; box-shadow: 0 0 15px rgba(255,51,51,0.4); border-color: transparent; }
+        .btn-active { background: var(--neon-green) !important; color: #0a0f1d !important; font-weight: 700; box-shadow: 0 0 15px var(--neon-green); border-color: transparent !important; }
 
+        /* Journal d'exploitation Télécom */
         #log-container {
-            flex: 1; background: #04070c; border: 1px solid #1a2942;
-            border-radius: 4px; padding: 10px; font-size: 11px; overflow-y: auto; color: #88a0c0;
+            flex: 1; background: #050811; border: 1px solid rgba(255,255,255,0.05);
+            border-radius: 6px; padding: 12px; font-family: monospace; font-size: 11px; overflow-y: auto; color: #a3b8cc;
+            box-shadow: inset 0 2px 10px rgba(0,0,0,0.8);
         }
-        .log-entry { margin-bottom: 4px; }
-        .log-time { color: #00ff66; margin-right: 8px; }
+        .log-entry { margin-bottom: 6px; line-height: 14px; display: flex; align-items: flex-start; }
+        .log-time { color: var(--neon-blue); margin-right: 10px; flex-shrink: 0; }
+
+        @keyframes pulse {
+            0% { transform: scale(1); opacity: 1; }
+            50% { transform: scale(1.2); opacity: 0.5; }
+            100% { transform: scale(1); opacity: 1; }
+        }
     </style>
 </head>
 <body>
 
 <div id="main-container">
     <div id="header">
-        <div id="pcc-title">🔴 PCC REM METROPOLE - SYSTÈMEDES 26 STATIONS</div>
-        <div id="pcc-status">MODE: AUTOMATIQUE (ATC)</div>
+        <div id="pcc-title"><div class="live-dot"></div> PCC REM METROPOLE - INTEGRATED SCADA SUPERVISOR [v4.2]</div>
+        <div id="pcc-status" style="font-family: monospace; font-size: 11px; color: var(--neon-green);">SYS_STATUS: NOMINAL (ATC_ACTIVE)</div>
     </div>
 
     <div id="workspace">
@@ -70,29 +118,34 @@
 
         <div id="side-panels">
             <div id="cctv-screen">
-                <div id="cctv-overlay">CCTV_FEED: AUCUN CANAL</div>
+                <div id="cctv-overlay">MATRIX_FEED // FEED_DISCONNECTED</div>
                 <canvas id="cctvCanvas"></canvas>
                 <div id="manual-hud" style="display: none;">
-                    <span id="hud-vitesse">VIT: 0 KM/H</span>
-                    <span id="hud-statut">PROPULSION IDLE</span>
+                    <span id="hud-vitesse" style="color: var(--neon-blue);">SPEED: 0 KM/H</span>
+                    <span id="hud-statut" style="color: var(--neon-green);">PROPULSION: COUPLER_OK</span>
                 </div>
             </div>
 
             <div id="pcc-dashboard">
-                <div id="controls">
-                    <div style="grid-column: span 2;">
-                        <label for="rame-select">SÉLECTION UNITÉ TRACE :</label>
-                        <select id="rame-select" onchange="changerSelectionRame()"></select>
+                <div>
+                    <div class="panel-label">Traçage matériel & Vecteurs</div>
+                    <select id="rame-select" onchange="changerSelectionRame()"></select>
+                </div>
+                
+                <div>
+                    <div class="panel-label">Matrice des commandes directes</div>
+                    <div id="controls">
+                        <button class="control-btn btn-alert" onclick="arretUrgence()">ARRÊT D'URGENCE</button>
+                        <button id="btn-manual" class="control-btn" onclick="basculerModeManuel()">CONDUITE MANUELLE</button>
+                        <button class="control-btn" onclick="modeMeteo()">PROT. TEMPÊTE</button>
+                        <button class="control-btn" onclick="relancerRame()">RE-ARM SYSTEM</button>
                     </div>
-                    <button class="control-btn btn-alert" onclick="arretUrgence()">ARRÊT D'URGENCE</button>
-                    <button id="btn-manual" class="control-btn" onclick="basculerModeManuel()">MODE MANUEL (VUE)</button>
-                    <button class="control-btn" onclick="modeMeteo()">MODE TEMPÊTE</button>
-                    <button class="control-btn" onclick="relancerRame()">RÉARMER LA RAME</button>
                 </div>
-                <div style="font-size: 11px; color:#88a0c0; text-align:center;">
-                    💡 Cliquez sur une station pour ouvrir sa caméra et injecter des voyageurs (+ Renforts).
+                
+                <div style="flex: 1; display: flex; flex-direction: column;">
+                    <div class="panel-label">Flux d'événements télécom</div>
+                    <div id="log-container"></div>
                 </div>
-                <div id="log-container"></div>
             </div>
         </div>
     </div>
@@ -112,68 +165,67 @@
     }
     window.addEventListener('resize', resizeCanvas);
 
-    // --- LE TRONC COMMUN ET LES SÉPARATIONS PRÉCISES (26 STATIONS) ---
+    // --- BASE DE DONNÉES GÉOGRAPHIQUE DU RÉSEAU (26 STATIONS COORDONNÉES SCADA) ---
     const troncCommunA1A2A3A4 = [
-        { name: "Gare Centrale", x: 700, y: 450, passagers: 15 },
-        { name: "McGill", x: 680, y: 400, passagers: 20 },
-        { name: "Édouard-Montpetit", x: 650, y: 350, passagers: 25 },
-        { name: "Canora", x: 620, y: 300, passagers: 12 },
-        { name: "Ville-de-Mont-Royal", x: 590, y: 280, passagers: 8 },
-        { name: "Côte-de-Liesse", x: 560, y: 260, passagers: 6 },
-        { name: "Montpellier", x: 530, y: 240, passagers: 5 },
-        { name: "Du Ruisseau", x: 500, y: 220, passagers: 10 },
-        { name: "Bois-Franc", x: 460, y: 220, passagers: 14 }
+        { name: "Gare Centrale", x: 720, y: 440, passagers: 12 },
+        { name: "McGill", x: 690, y: 395, passagers: 22 },
+        { name: "Édouard-Montpetit", x: 660, y: 350, passagers: 28 },
+        { name: "Canora", x: 625, y: 300, passagers: 14 },
+        { name: "Ville-de-Mont-Royal", x: 595, y: 275, passagers: 7 },
+        { name: "Côte-de-Liesse", x: 565, y: 250, passagers: 4 },
+        { name: "Montpellier", x: 535, y: 225, passagers: 6 },
+        { name: "Du Ruisseau", x: 500, y: 205, passagers: 11 },
+        { name: "Bois-Franc", x: 450, y: 205, passagers: 18 }
     ];
 
     const lignesGraphiques = {
         "A1": [
-            { name: "Brossard", x: 920, y: 580, passagers: 10 },
-            { name: "Du Quartier", x: 880, y: 540, passagers: 12 },
-            { name: "Panama", x: 830, y: 510, passagers: 18 },
-            { name: "Île-des-Sœurs", x: 770, y: 480, passagers: 15 },
-            { name: "Griffintown-Bernard-Landry", x: 730, y: 465, passagers: 5 },
+            { name: "Brossard", x: 960, y: 580, passagers: 8 },
+            { name: "Du Quartier", x: 915, y: 540, passagers: 14 },
+            { name: "Panama", x: 860, y: 505, passagers: 25 },
+            { name: "Île-des-Sœurs", x: 800, y: 475, passagers: 19 },
+            { name: "Griffintown-Bernard-Landry", x: 755, y: 455, passagers: 6 },
             ...troncCommunA1A2A3A4
         ],
         "A4": [
             ...troncCommunA1A2A3A4,
-            { name: "Sunnybrooke", x: 380, y: 220, passagers: 9 },
-            { name: "Pierrefonds-Roxboro", x: 320, y: 190, passagers: 11 },
-            { name: "Île-Bigras", x: 270, y: 150, passagers: 4 },
-            { name: "Sainte-Dorothée", x: 250, y: 120, passagers: 8 },
-            { name: "Grand-Moulin", x: 220, y: 80, passagers: 6 },
-            { name: "Deux-Montagnes", x: 180, y: 50, passagers: 20 }
+            { name: "Sunnybrooke", x: 375, y: 205, passagers: 10 },
+            { name: "Pierrefonds-Roxboro", x: 315, y: 175, passagers: 13 },
+            { name: "Île-Bigras", x: 260, y: 135, passagers: 3 },
+            { name: "Sainte-Dorothée", x: 235, y: 105, passagers: 9 },
+            { name: "Grand-Moulin", x: 205, y: 65, passagers: 5 },
+            { name: "Deux-Montagnes", x: 165, y: 35, passagers: 32 }
         ],
         "A3": [
             ...troncCommunA1A2A3A4,
-            { name: "Sunnybrooke", x: 380, y: 220, passagers: 9 }, // Jalon de bifurcation
-            { name: "Des Sources", x: 340, y: 250, passagers: 7 },
-            { name: "Fairview-Pointe-Claire", x: 260, y: 250, passagers: 22 },
-            { name: "Kirkland", x: 160, y: 250, passagers: 13 },
-            { name: "Anse-à-l'Orme", x: 80, y: 250, passagers: 15 }
+            { name: "Sunnybrooke", x: 375, y: 205, passagers: 10 }, 
+            { name: "Des Sources", x: 330, y: 240, passagers: 8 },
+            { name: "Fairview-Pointe-Claire", x: 245, y: 240, passagers: 26 },
+            { name: "Kirkland", x: 145, y: 240, passagers: 11 },
+            { name: "Anse-à-l'Orme", x: 65, y: 240, passagers: 17 }
         ],
         "A2": [
             ...troncCommunA1A2A3A4,
-            { name: "Marie-Curie", x: 420, y: 280, passagers: 5 },
-            { name: "YUL-Aéroport-Montréal-Trudeau", x: 380, y: 350, passagers: 40 }
+            { name: "Marie-Curie", x: 405, y: 275, passagers: 4 },
+            { name: "YUL-Aéroport-Montréal-Trudeau", x: 360, y: 345, passagers: 55 }
         ]
     };
 
-    // Ajustement de l'ordre pour les lignes qui partent de la Gare Centrale vers leur terminus propre
-    lignesGraphiques["A1"].reverse(); // Pour que Brossard soit le terminus opposé
+    lignesGraphiques["A1"].reverse(); // Uniformisation du sens de roulement
 
-    // --- ENSEMBLE DES RAMES ---
+    // --- CONFIGURATION FLOTTE ET PARAMÈTRES RÉALISTES ---
     let rames = [];
     const antennes = ["A1", "A2", "A3", "A4"];
     antennes.forEach(ant => {
         for(let i = 1; i <= 3; i++) {
             rames.push({
-                id: `REM-${ant}-${100 + i * 22}`,
+                id: `RM-${ant}-${200 + i * 14}`,
                 ligne: ant,
                 etape: Math.floor(Math.random() * (lignesGraphiques[ant].length - 1)),
                 prog: Math.random() * 0.9,
                 sens: 1,
-                vitesse: 0.003 + Math.random() * 0.002,
-                maxVit: 0.005,
+                vitesse: 0.002 + Math.random() * 0.0015,
+                maxVit: 0.004,
                 enStation: false,
                 timerArret: 0,
                 urg: false,
@@ -183,7 +235,7 @@
     });
 
     let rameSelectionnee = rames[0];
-    let stationSelectionnee = lignesGraphiques["A1"][5]; // Gare Centrale par défaut
+    let stationSelectionnee = lignesGraphiques["A1"][5]; 
     let modeManuelActif = false;
     let vitesseManuelle = 0;
 
@@ -191,31 +243,27 @@
     rames.forEach(r => {
         let opt = document.createElement('option');
         opt.value = r.id;
-        opt.textContent = `${r.id} [Antenne ${r.ligne}]`;
+        opt.textContent = `${r.id} // SYS_${r.ligne}`;
         select.appendChild(opt);
     });
 
+    // Interception des clics sur les nœuds
     canvas.addEventListener('click', function(e) {
         const rect = canvas.getBoundingClientRect();
         const clickX = e.clientX - rect.left;
         const clickY = e.clientY - rect.top;
         const scaleX = canvas.width / 1100;
-        const scaleY = canvas.height / 600;
+        const scaleY = canvas.height / 650;
 
         Object.keys(lignesGraphiques).forEach(key => {
             lignesGraphiques[key].forEach(st => {
-                let stX = st.x * scaleX;
-                let stY = st.y * scaleY;
-                let dist = Math.sqrt((clickX - stX)**2 + (clickY - stY)**2);
-                
-                if (dist < 12) {
+                let dist = Math.sqrt((clickX - st.x * scaleX)**2 + (clickY - st.y * scaleY)**2);
+                if (dist < 16) {
                     stationSelectionnee = st;
                     modeManuelActif = false;
                     document.getElementById('manual-hud').style.display = "none";
-                    
-                    st.passagers += Math.floor(Math.random() * 30 + 20);
-                    ajouterLog(`📢 INFLUX : Flux élevé à la station ${st.name} (${st.passagers} voyageurs).`);
-                    
+                    st.passagers += Math.floor(Math.random() * 25 + 25);
+                    ajouterLog(`TELECOM // Affluence critique détectée quai : ${st.name}. Air-index élevé.`);
                     declencherRenfortGareCentrale(key, st.name);
                 }
             });
@@ -224,11 +272,11 @@
 
     function declencherRenfortGareCentrale(antenneCode, nomStation) {
         let idxGare = lignesGraphiques[antenneCode].findIndex(s => s.name === "Gare Centrale");
-        let rameRenfort = rames.find(r => r.ligne === antenneCode && r.etape === idxGare && !r.renfort);
-        if(rameRenfort) {
-            rameRenfort.renfort = true;
-            rameRenfort.vitesse = rameRenfort.maxVit * 1.4;
-            ajouterLog(`🚀 PCC : Unité de réserve ${rameRenfort.id} injectée en mode EXPRESS vers ${nomStation}.`);
+        let rRenfort = rames.find(r => r.ligne === antenneCode && r.etape === idxGare && !r.renfort);
+        if(rRenfort) {
+            rRenfort.renfort = true;
+            rRenfort.vitesse = rRenfort.maxVit * 1.35;
+            ajouterLog(`SYS_INJECTION // Rame Réserve ${rRenfort.id} routée en EXPRESS.`);
         }
     }
 
@@ -244,98 +292,115 @@
         if(modeManuelActif) {
             btn.classList.add('btn-active');
             hud.style.display = "flex";
-            vitesseManuelle = 0;
-            rameSelectionnee.urg = false;
-            stationSelectionnee = null;
-            ajouterLog(`🕹️ PILOTAGE : Prise de contrôle manuelle de l'unité ${rameSelectionnee.id}.`);
+            vitesseManuelle = 0; rameSelectionnee.urg = false; stationSelectionnee = null;
+            ajouterLog(`PILOT_OVERRIDE // Contrôle direct engagé pour ${rameSelectionnee.id}.`);
         } else {
             btn.classList.remove('btn-active');
             hud.style.display = "none";
-            ajouterLog(`✅ PCC : Rame ${rameSelectionnee.id} basculée en pilotage automatique.`);
+            ajouterLog(`ATC_RESTORE // Réalignement géofencing automatique pour ${rameSelectionnee.id}.`);
         }
     }
 
     window.addEventListener('keydown', function(e) {
         if(!modeManuelActif) return;
-        if(e.key === "ArrowUp" || e.key.toLowerCase() === "d") {
-            vitesseManuelle = Math.min(vitesseManuelle + 5, 100);
-        }
-        if(e.key === "ArrowDown" || e.key.toLowerCase() === "s") {
-            vitesseManuelle = Math.max(vitesseManuelle - 8, 0);
-        }
+        if(e.key === "ArrowUp" || e.key.toLowerCase() === "d") vitesseManuelle = Math.min(vitesseManuelle + 4, 90);
+        if(e.key === "ArrowDown" || e.key.toLowerCase() === "s") vitesseManuelle = Math.max(vitesseManuelle - 6, 0);
     });
 
+    // --- INTERFACE RENDU SYNOPTIQUE PROFESSIONNEL (PRO SCADA LOOK) ---
     function bouclePrincipale() {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
         const scaleX = canvas.width / 1100;
-        const scaleY = canvas.height / 600;
+        const scaleY = canvas.height / 650;
 
-        // 1. Rendu des lignes (Voies ferrées)
+        // Étape 1 : Rendu des structures de voies (Double ligne industrielle)
         Object.keys(lignesGraphiques).forEach(key => {
             const stations = lignesGraphiques[key];
+            
+            // Ligne de structure d'ombre (Effet relief)
             ctx.beginPath();
-            ctx.strokeStyle = "#121b2d"; ctx.lineWidth = 3;
+            ctx.strokeStyle = "#0d172e"; ctx.lineWidth = 6;
             for(let i=0; i<stations.length; i++) {
                 if(i===0) ctx.moveTo(stations[i].x * scaleX, stations[i].y * scaleY);
                 else ctx.lineTo(stations[i].x * scaleX, stations[i].y * scaleY);
             }
             ctx.stroke();
 
-            // Rendu des marqueurs de stations
-            stations.forEach(st => {
-                ctx.beginPath();
-                ctx.arc(st.x * scaleX, st.y * scaleY, 5, 0, 2 * Math.PI);
-                ctx.fillStyle = (stationSelectionnee === st) ? "#00ff66" : "#0c1322";
-                ctx.fill();
-                ctx.strokeStyle = st.passagers > 35 ? "#ff3333" : "#00ff66";
-                ctx.lineWidth = 1.5; ctx.stroke();
+            // Circuit de voie technologique principal
+            ctx.beginPath();
+            ctx.strokeStyle = "#1b2d54"; ctx.lineWidth = 2;
+            for(let i=0; i<stations.length; i++) {
+                if(i===0) ctx.moveTo(stations[i].x * scaleX, stations[i].y * scaleY);
+                else ctx.lineTo(stations[i].x * scaleX, stations[i].y * scaleY);
+            }
+            ctx.stroke();
 
-                ctx.fillStyle = "#88a0c0"; ctx.font = "9px Courier New";
-                // Éviter les superpositions grossières d'étiquettes sur le tronc commun
+            // Dessin des Stations SCADA (Carrés techniques de signalisation)
+            stations.forEach(st => {
+                let sx = st.x * scaleX;
+                let sy = st.y * scaleY;
+
+                ctx.fillStyle = "#060b19";
+                ctx.fillRect(sx - 5, sy - 5, 10, 10);
+                
+                // Détermination état de saturation de la station
+                if (stationSelectionnee === st) {
+                    ctx.strokeStyle = varColor('--neon-blue');
+                    ctx.shadowColor = varColor('--neon-blue');
+                    ctx.shadowBlur = 8;
+                } else if (st.passagers > 40) {
+                    ctx.strokeStyle = varColor('--neon-red');
+                    ctx.shadowColor = varColor('--neon-red');
+                    ctx.shadowBlur = 10;
+                } else {
+                    ctx.strokeStyle = "rgba(0, 255, 102, 0.7)";
+                    ctx.shadowBlur = 0;
+                }
+                
+                ctx.lineWidth = 1.5;
+                ctx.strokeRect(sx - 5, sy - 5, 10, 10);
+                ctx.shadowBlur = 0; // Reset obligat
+
+                // Typographie Épurée Ingénierie
                 if (key === "A1" || !troncCommunA1A2A3A4.some(t => t.name === st.name)) {
-                    ctx.fillText(`${st.name.substring(0,15)} (${st.passagers}p)`, (st.x * scaleX) + 10, (st.y * scaleY) + 3);
+                    ctx.fillStyle = st.passagers > 40 ? "#ff6666" : "#8ea4c1";
+                    ctx.font = "bold 9px monospace";
+                    ctx.fillText(st.name.toUpperCase(), sx + 12, sy + 3);
                 }
             });
         });
 
-        // 2. Mise à jour de la flotte
+        // Étape 2 : Rendu Dynamique et Vélocité Matériels (Rames REM)
         rames.forEach(r => {
             const stations = lignesGraphiques[r.ligne];
 
             if(modeManuelActif && r === rameSelectionnee) {
-                r.prog += (vitesseManuelle / 25000);
-                document.getElementById('hud-vitesse').textContent = `VIT: ${vitesseManuelle} KM/H`;
-                document.getElementById('hud-statut').textContent = vitesseManuelle > 0 ? "TRACTION MANUELLE" : "BLOC STATIQUE";
-                
+                r.prog += (vitesseManuelle / 32000);
+                document.getElementById('hud-vitesse').textContent = `MAN_SPEED: ${vitesseManuelle} KM/H`;
+                document.getElementById('hud-statut').textContent = vitesseManuelle > 0 ? "TRACTION_ENGAGED" : "BRAKE_LOCK";
                 if (r.prog >= 1.0) {
                     r.prog = 0; r.etape += r.sens;
                     if (r.etape >= stations.length - 1 || r.etape <= 0) r.sens *= -1;
                     vitesseManuelle = 0;
-                    ajouterLog(`🕹️ ${r.id} : Point d'arrêt franchi.`);
+                    ajouterLog(`SYS_TRACK // ${r.id} stabilisé sur balise d'étape.`);
                 }
             } else {
                 if (!r.urg && !r.enStation) {
                     r.prog += r.vitesse;
                     if (r.prog >= 1.0) {
                         r.prog = 0; r.etape += r.sens;
-
                         if (r.etape >= stations.length - 1 || r.etape <= 0) {
-                            r.sens *= -1;
-                            r.renfort = false;
-                            r.vitesse = r.maxVit;
+                            r.sens *= -1; r.renfort = false; r.vitesse = r.maxVit;
                         }
                         r.enStation = true;
                     }
                 } else if (r.enStation) {
                     r.timerArret += 0.016;
-                    if (r.timerArret >= 2.0) {
+                    if (r.timerArret >= 1.8) {
                         r.enStation = false; r.timerArret = 0;
                         let stActuelle = stations[r.etape];
-                        if(stActuelle) {
-                            let embarques = Math.min(stActuelle.passagers, 25);
-                            stActuelle.passagers -= embarques;
-                        }
+                        if(stActuelle) stActuelle.passagers = Math.max(0, stActuelle.passagers - 20);
                     }
                 }
             }
@@ -344,18 +409,41 @@
             let ptB = stations[r.etape + (r.sens > 0 ? 1 : -1)];
             
             if (ptA && ptB) {
-                let currX = (ptA.x + (ptB.x - ptA.x) * r.prog) * scaleX;
-                let currY = (ptA.y + (ptB.y - ptA.y) * r.prog) * scaleY;
+                let rx = (ptA.x + (ptB.x - ptA.x) * r.prog) * scaleX;
+                let ry = (ptA.y + (ptB.y - ptA.y) * r.prog) * scaleY;
 
-                ctx.beginPath();
-                ctx.arc(currX, currY, r === rameSelectionnee ? 7 : 4, 0, 2 * Math.PI);
+                // Dessin d'une rame type "capsule SCADA" allongée
+                ctx.save();
+                ctx.translate(rx, ry);
                 
-                if (r.urg) ctx.fillStyle = (Math.floor(Date.now() / 200) % 2 === 0) ? "#ff3333" : "#060911";
-                else if (r.renfort) ctx.fillStyle = "#ffff00";
-                else ctx.fillStyle = r.enStation ? "#ffffff" : "#00ff66";
-                
-                ctx.fill();
-                ctx.strokeStyle = "#fff"; ctx.lineWidth = 1; ctx.stroke();
+                // Calcul de l'angle pour aligner le module sur la voie
+                let angle = Math.atan2((ptB.y - ptA.y), (ptB.x - ptA.x));
+                ctx.rotate(angle);
+
+                // Effet Neon Glow Propre
+                if (r.urg) {
+                    ctx.fillStyle = (Math.floor(Date.now() / 150) % 2 === 0) ? varColor('--neon-red') : "#200505";
+                    ctx.shadowColor = varColor('--neon-red'); ctx.shadowBlur = 12;
+                } else if (r.renfort) {
+                    ctx.fillStyle = varColor('--neon-yellow');
+                    ctx.shadowColor = varColor('--neon-yellow'); ctx.shadowBlur = 10;
+                } else {
+                    ctx.fillStyle = r.enStation ? "#ffffff" : varColor('--neon-green');
+                    ctx.shadowColor = r.enStation ? "#ffffff" : varColor('--neon-green');
+                    ctx.shadowBlur = r === rameSelectionnee ? 12 : 6;
+                }
+
+                // Corps de la rame
+                ctx.fillRect(-8, -3, 16, 6);
+                ctx.restore();
+                ctx.shadowBlur = 0; // Anti-contamination graphique
+
+                // Identifiant système
+                if(r === rameSelectionnee) {
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "9px monospace";
+                    ctx.fillText(`►${r.id}`, rx - 22, ry - 8);
+                }
             }
         });
 
@@ -363,83 +451,98 @@
         requestAnimationFrame(bouclePrincipale);
     }
 
+    // --- COCKPIT 3D FILAIRE MATRICIEL ET MONITEUR CCTV ---
     function renderÉcranSecondaire() {
         cctvCtx.clearRect(0, 0, cctvCanvas.width, cctvCanvas.height);
-        cctvCtx.fillStyle = "rgba(0, 12, 4, 0.95)";
+        
+        // Fond moniteur CRT sombre
+        cctvCtx.fillStyle = "#030611";
         cctvCtx.fillRect(0, 0, cctvCanvas.width, cctvCanvas.height);
 
         if (modeManuelActif && rameSelectionnee) {
-            document.getElementById('cctv-overlay').textContent = `VUE_CABINE_NUMÉRIQUE // ID: ${rameSelectionnee.id}`;
+            document.getElementById('cctv-overlay').textContent = `HUD_HOLOGRAPHIQUE // CAB_VIEW // UNIT:${rameSelectionnee.id}`;
             
-            cctvCtx.strokeStyle = "#00ff66"; cctvCtx.lineWidth = 2;
+            // Géométrie filaire fuyante (Simulation cockpit ultra-réaliste)
+            cctvCtx.strokeStyle = "rgba(0, 217, 255, 0.4)"; cctvCtx.lineWidth = 1;
+            cctvCtx.strokeRect(30, 20, cctvCanvas.width - 60, cctvCanvas.height - 50);
+
+            // Réticule central de ciblage de voie
+            cctvCtx.strokeStyle = "rgba(0, 255, 102, 0.5)";
             cctvCtx.beginPath();
-            cctvCtx.moveTo(20, 20); cctvCtx.lineTo(cctvCanvas.width - 20, 20);
-            cctvCtx.lineTo(cctvCanvas.width - 40, cctvCanvas.height - 40);
-            cctvCtx.lineTo(40, cctvCanvas.height - 40); cctvCtx.closePath();
+            cctvCtx.arc(cctvCanvas.width/2, cctvCanvas.height/2 - 10, 30, 0, 2*Math.PI);
+            ctx.lineWidth = 0.5;
             cctvCtx.stroke();
 
+            // Vecteurs de rails fuyants cinétiques
+            let flow = (Date.now() / 6) % 60;
+            cctvCtx.strokeStyle = varColor('--neon-blue'); cctvCtx.lineWidth = 2;
             cctvCtx.beginPath();
-            cctvCtx.moveTo(cctvCanvas.width / 2 - 15, 30); cctvCtx.lineTo(80, cctvCanvas.height - 40);
-            cctvCtx.moveTo(cctvCanvas.width / 2 + 15, 30); cctvCtx.lineTo(cctvCanvas.width - 80, cctvCanvas.height - 40);
+            cctvCtx.moveTo(cctvCanvas.width / 2 - 20, cctvCanvas.height / 2 - 20);
+            cctvCtx.lineTo(50, cctvCanvas.height - 30);
+            cctvCtx.moveTo(cctvCanvas.width / 2 + 20, cctvCanvas.height / 2 - 20);
+            cctvCtx.lineTo(cctvCanvas.width - 50, cctvCanvas.height - 30);
             cctvCtx.stroke();
-
-            cctvCtx.fillStyle = "#00ff66"; cctvCtx.font = "11px Courier New";
-            cctvCtx.fillText("▲ MAINTENIR [D] OU [HAUT] POUR AVANCER", 40, cctvCanvas.height - 55);
             
         } else if (stationSelectionnee) {
-            document.getElementById('cctv-overlay').textContent = `SURVEILLANCE_QUAI // STATION: ${stationSelectionnee.name.toUpperCase()}`;
+            document.getElementById('cctv-overlay').textContent = `ANALYSE_FLUX_CCTV // NODE: ${stationSelectionnee.name.toUpperCase()}`;
             
-            cctvCtx.strokeStyle = "#00ff66"; cctvCtx.lineWidth = 1;
-            cctvCtx.strokeRect(20, 50, cctvCanvas.width - 40, 140);
+            // Cadre d'analyse de foule
+            cctvCtx.strokeStyle = "rgba(255,255,255,0.08)";
+            cctvCtx.strokeRect(15, 45, cctvCanvas.width - 30, 150);
             
-            cctvCtx.fillStyle = "rgba(0, 255, 102, 0.35)";
-            let affichagePassagers = Math.min(stationSelectionnee.passagers, 150);
-            for(let i=0; i < affichagePassagers; i++) {
-                let px = 30 + (i * 6) % (cctvCanvas.width - 60);
-                let py = 90 + Math.floor(i / 40) * 10;
-                cctvCtx.fillRect(px, py, 3, 5);
+            // Génération de particules de pixels thermiques/optiques pour la foule
+            cctvCtx.fillStyle = stationSelectionnee.passagers > 40 ? "rgba(255, 51, 51, 0.5)" : "rgba(0, 255, 102, 0.4)";
+            let count = Math.min(stationSelectionnee.passagers, 180);
+            for(let i=0; i < count; i++) {
+                let px = 25 + (i * 6.5) % (cctvCanvas.width - 50);
+                let py = 85 + Math.floor(i / 50) * 9;
+                cctvCtx.fillRect(px, py, 3, 4);
             }
 
-            cctvCtx.fillStyle = "#fff"; cctvCtx.font = "11px Courier New";
-            cctvCtx.fillText(`USAGERS SUR LE QUAI : ${stationSelectionnee.passagers}`, 35, 70);
+            cctvCtx.fillStyle = "#fff"; ctx.font = "10px monospace";
+            cctvCtx.fillText(`VOLUMÉTRIE CIBLE : ${stationSelectionnee.passagers} UNITÉS`, 25, 68);
         }
 
-        for (let y = 0; y < cctvCanvas.height; y += 4) {
+        // Trame d'entrelacement lignes balayage (Scanlines CRT)
+        cctvCtx.fillStyle = "rgba(0, 0, 0, 0.25)";
+        for (let y = 0; y < cctvCanvas.height; y += 3) {
             cctvCtx.fillRect(0, y, cctvCanvas.width, 1);
         }
+    }
+
+    function varColor(name) {
+        return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
     }
 
     function ajouterLog(texte) {
         const container = document.getElementById('log-container');
         const temps = new Date().toLocaleTimeString();
-        container.innerHTML += `<div class="log-entry"><span class="log-time">[${temps}]</span>${texte}</div>`;
+        container.innerHTML += `<div class="log-entry"><span class="log-time">[${temps}]</span><span>${texte}</span></div>`;
         container.scrollTop = container.scrollHeight;
     }
 
     function arretUrgence() {
         if(rameSelectionnee) {
-            rameSelectionnee.urg = true;
-            vitesseManuelle = 0;
-            ajouterLog(`🚨 ALERT : Arrêt de sécurité appliqué sur ${rameSelectionnee.id}.`);
+            rameSelectionnee.urg = true; vitesseManuelle = 0;
+            ajouterLog(`🚨 INT-SHUTDOWN // Rupture caténaire ordonnée sur la rame ${rameSelectionnee.id}.`);
         }
     }
 
     function modeMeteo() {
-        rames.forEach(r => { r.vitesse = r.maxVit * 0.4; });
-        ajouterLog(`❄️ CONFIG : Mode Tempête activé. Limitation stricte de vitesse sur le réseau.`);
+        rames.forEach(r => { r.vitesse = r.maxVit * 0.45; });
+        ajouterLog(`❄️ CLIMAT_MODE // Déclenchement du profil de protection givre (Vmax bridée).`);
     }
 
     function relancerRame() {
         if(rameSelectionnee) {
-            rameSelectionnee.urg = false;
-            rameSelectionnee.enStation = false;
+            rameSelectionnee.urg = false; rameSelectionnee.enStation = false;
             rameSelectionnee.vitesse = rames.find(r => r.id === rameSelectionnee.id).maxVit;
-            ajouterLog(`✅ PCC : Système automatisé réarmé pour ${rameSelectionnee.id}.`);
+            ajouterLog(`✅ SECURITY_CLEAR // Automatismes ATC réinitialisés pour ${rameSelectionnee.id}.`);
         }
     }
 
     resizeCanvas();
-    ajouterLog("Poste de contrôle en ligne. Gestion synoptique des 26 stations activée.");
+    ajouterLog("CORE_SYS // Liaison SCADA initialisée. Flux synoptique synchrone.");
     requestAnimationFrame(bouclePrincipale);
 </script>
 
