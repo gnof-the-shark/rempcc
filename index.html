@@ -186,7 +186,8 @@
     targetRunKmh: 62,
     maxReplaySnapshots: 300,
     minDwellSeconds: 22,
-    maxDwellSeconds: 55
+    maxDwellSeconds: 55,
+    replaySpeedMultiplier: 2
   };
 
   const model = {
@@ -198,7 +199,13 @@
     decelKmhPerStep: 9,
     boardPassengersPerSecondUnit: 18,
     alightPassengersPerSecondUnit: 22,
-    overcrowdDwellPenaltySeconds: 8
+    overcrowdDwellPenaltySeconds: 8,
+    demandAmplitude: 0.45,
+    demandBaseline: 0.75,
+    crowdIncidentDemandMultiplier: 1.4,
+    sameSegmentSafetyThreshold: 0.25,
+    minAlightRatio: 0.08,
+    maxAlightRatio: 0.15
   };
 
   const sharedTrunk = [
@@ -354,11 +361,11 @@
   }
 
   function toClock(minutes) {
-    const d = Math.floor(minutes / 1440);
+    const days = Math.floor(minutes / 1440);
     const m = Math.floor(minutes % 1440);
     const h = Math.floor(m / 60);
     const mm = m % 60;
-    return `J+${d} ${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    return `J+${days} ${String(h).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
   }
 
   function isServiceOpen() {
@@ -379,13 +386,13 @@
     const serviceFactor = isServiceOpen() ? 1 : 0.2;
     Object.values(state.network).flat().forEach((station) => {
       // Courbe quotidienne simplifiée: base 0.75, amplitude 0.45, pic pendant les pointes.
-      const peak = Math.sin((state.simMinutes % 1440) / 1440 * Math.PI * 2 - Math.PI / 2) * 0.45 + 0.75;
+      const peak = Math.sin((state.simMinutes % 1440) / 1440 * Math.PI * 2 - Math.PI / 2) * model.demandAmplitude + model.demandBaseline;
       const add = station.demand * peak * serviceFactor * (dtSeconds / model.passengerArrivalWindowSeconds);
       station.waiting = Math.min(station.platformCapacity * 2, station.waiting + add);
 
       const overloadIncident = state.incidents.find((it) => it.type === 'crowd' && it.stationKey === station.key);
       if (overloadIncident) {
-        station.waiting = Math.min(station.platformCapacity * 2, station.waiting + 1.4 * (dtSeconds / model.crowdIncidentBoostWindowSeconds));
+        station.waiting = Math.min(station.platformCapacity * 2, station.waiting + model.crowdIncidentDemandMultiplier * (dtSeconds / model.crowdIncidentBoostWindowSeconds));
       }
     });
   }
@@ -418,7 +425,7 @@
     return state.trains.some((other) => {
       if (other.id === train.id || other.branch !== train.branch) return false;
       const distanceSegments = Math.abs(other.segment - train.segment);
-      return distanceSegments === 0 && Math.abs(other.progress - train.progress) < 0.25;
+      return distanceSegments === 0 && Math.abs(other.progress - train.progress) < model.sameSegmentSafetyThreshold;
     });
   }
 
@@ -504,7 +511,8 @@
       }
 
       const station = stations[train.segment];
-      const alight = Math.floor(train.onboard * (0.08 + Math.random() * 0.07));
+      const alightRatio = model.minAlightRatio + Math.random() * (model.maxAlightRatio - model.minAlightRatio);
+      const alight = Math.floor(train.onboard * alightRatio);
       train.onboard = Math.max(0, train.onboard - alight);
 
       const available = config.trainCapacity - train.onboard;
@@ -794,7 +802,7 @@
     lastTs = ts;
 
     if (state.replayMode && state.replayPlaying) {
-      state.replayCursor += dt * 2;
+      state.replayCursor += dt * config.replaySpeedMultiplier;
       const idx = Math.min(state.replaySnapshots.length - 1, Math.floor(state.replayCursor));
       ui.replaySlider.value = String(idx);
       applySnapshot(state.replaySnapshots[idx]);
